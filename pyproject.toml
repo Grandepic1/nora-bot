@@ -10,6 +10,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "google-api-python-client>=2.200.0",
     "google-auth>=2.57.1",
+    "google-genai>=2.22.0",
     "logging>=0.4.9.6",
     "python-dotenv>=1.2.3",
     "requests>=2.34.2",
