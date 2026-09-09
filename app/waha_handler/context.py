@@ -1,10 +1,12 @@
 import requests
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class Context:
-    def __init__(self, bot, event: dict):
+    def __init__(self, bot, event: dict, db: AsyncSession):
         self.bot = bot
         self.event = event
+        self.db = db
 
         payload: dict = event.get("payload", {})
 
