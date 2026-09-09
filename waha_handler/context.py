@@ -15,7 +15,7 @@ class Context:
         self.session = event.get("session")
         self.message_id = payload.get("id")
 
-    def send(self, message: str):
+    async def send(self, message: str):
         response = requests.post(
             f"{self.bot.waha_url}/api/sendText",
             headers={

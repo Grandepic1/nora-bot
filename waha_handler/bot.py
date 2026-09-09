@@ -3,6 +3,7 @@ Waha Framework Handler with Discord Based Inspired
 """
 
 import inspect
+import logging
 
 from aiohttp import web
 
@@ -14,12 +15,14 @@ class WahaBot:
         self,
         waha_url: str,
         api_key: str,
-        prefix: str = "/"
+        prefix: str = "/",
+        debug:bool = False
     ):
         self.waha_url = waha_url.rstrip("/")
         self.api_key = api_key
         self.prefix = prefix
         self.commands = {}
+        self.debug = debug
 
         self.app = web.Application()
 
@@ -82,8 +85,10 @@ class WahaBot:
         return web.json_response({"ok": True})
 
     def run(self, host="127.0.0.1", port=8000):
+        if self.debug:
+            logging.basicConfig(level=logging.DEBUG)
         web.run_app(
             self.app,
             host=host,
-            port=port,
+            port=port
         )
