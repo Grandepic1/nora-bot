@@ -7,7 +7,7 @@ import logging
 
 from aiohttp import web
 
-from waha_handler.context import Context
+from app.waha_handler.context import Context
 
 
 class WahaBot:

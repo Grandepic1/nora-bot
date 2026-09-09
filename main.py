@@ -2,7 +2,7 @@ import os
 
 from dotenv import load_dotenv
 
-from waha_handler.bot import WahaBot
+from app.waha_handler.bot import WahaBot
 
 load_dotenv()
 bot = WahaBot(
