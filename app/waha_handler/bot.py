@@ -2,10 +2,12 @@
 Waha Framework Handler with Discord Based Inspired
 """
 
+import importlib
 import inspect
 import logging
 
 from aiohttp import web
+import aiohttp
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -29,14 +31,32 @@ class WahaBot:
         self.prefix = prefix
         self.commands = {}
         self.debug = debug
+        self.extensions = []
+        self.http: aiohttp.ClientSession | None = None
 
         self.app = web.Application()
         self.app.cleanup_ctx.append(self._database_context)
+        self.app.cleanup_ctx.append(self._http_context)
 
         self.app.router.add_post(
             "/webhook/waha",
             self._handle_webhook,
         )
+
+        self.app.on_startup.append(
+            self._setup_extensions
+        )
+
+    async def _http_context(self, app):
+        timeout = aiohttp.ClientTimeout(total=10)
+
+        self.http = aiohttp.ClientSession(
+            timeout=timeout
+        )
+
+        yield
+
+        await self.http.close()
 
     async def _database_context(self, app: web.Application):
         try:
@@ -91,11 +111,7 @@ class WahaBot:
                     ctx = Context(self, data, db)
 
                     try:
-                        result = command(ctx, *args)
-
-                        if inspect.isawaitable(result):
-                            await result
-
+                        await command(ctx, *args)
                         await db.commit()
                     except Exception:
                         await db.rollback()
@@ -104,6 +120,25 @@ class WahaBot:
                 logging.exception("Command error")
 
         return web.json_response({"ok": True})
+
+    def load_extension(self, name: str):
+        self.extensions.append(name)
+
+    async def _setup_extensions(self, app):
+        for name in self.extensions:
+            module = importlib.import_module(name)
+
+            setup = getattr(module, "setup", None)
+
+            if setup is None:
+                raise RuntimeError(
+                    f"Extension '{name}' has no setup(bot)"
+                )
+
+            result = setup(self)
+
+            if inspect.isawaitable(result):
+                await result
 
     def run(self, host="127.0.0.1", port=8000):
         if self.debug:
