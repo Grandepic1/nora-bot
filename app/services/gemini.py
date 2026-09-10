@@ -2,8 +2,37 @@ import os
 
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
+
+from app.tools.sheets import (
+    append_rows,
+    clear_row,
+    clear_sheet,
+    create_sheet,
+    delete_row,
+    delete_sheet,
+    list_sheets,
+    read_row,
+    read_sheet,
+    rename_sheet,
+    update_row,
+)
 
 load_dotenv()
+
+TOOLS = [
+    list_sheets,
+    read_sheet,
+    read_row,
+    append_rows,
+    update_row,
+    clear_row,
+    delete_row,
+    create_sheet,
+    rename_sheet,
+    clear_sheet,
+    delete_sheet,
+]
 
 class GeminiService:
     def __init__(self):
@@ -17,7 +46,10 @@ class GeminiService:
     def generate(self, message: str) -> str:
         response = self.client.models.generate_content(
             model=os.getenv("GEMINI_MODEL"),
-            contents=message
+            contents=message,
+            config=types.GenerateContentConfig(
+                tools=TOOLS
+            )
         )
 
         return response.text
