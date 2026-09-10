@@ -11,4 +11,3 @@ async def setup(bot:WahaBot):
         name = " ".join(args)
 
         await ctx.send(f"Hello, {name}")
-    

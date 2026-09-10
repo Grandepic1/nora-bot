@@ -43,9 +43,9 @@ class GeminiService:
 
         self.client = genai.Client(api_key=api_key)
 
-    def generate(self, message: str) -> str:
-        response = self.client.models.generate_content(
-            model=os.getenv("GEMINI_MODEL"),
+    async def generate(self, message: str) -> str | None:
+        response = await self.client.aio.models.generate_content(
+            model=os.environ["GEMINI_MODEL"],
             contents=message,
             config=types.GenerateContentConfig(
                 tools=TOOLS
@@ -53,3 +53,6 @@ class GeminiService:
         )
 
         return response.text
+
+    async def close(self):
+        await self.client.aio.aclose()
