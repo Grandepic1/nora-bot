@@ -16,15 +16,10 @@ bot = WahaBot(
     debug=os.getenv("DEBUG", "False") == "True",
 )
 
-@bot.command("hello")
-async def hello(ctx, *args):
-    if not args:
-        await ctx.send("Coba masukin nama lek. Contoh: /hello Revaldo")
-        return
+for filename in os.listdir('./app/commands'):
+    if filename.endswith('.py'):
+        bot.load_extension(f'app.commands.{filename[:-3]}')
 
-    name = " ".join(args)
-
-    await ctx.send(f"Hello, {name}")
 
 if __name__ == "__main__":
     bot.run(

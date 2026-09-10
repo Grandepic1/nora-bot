@@ -26,7 +26,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("session_name", sa.String(length=255), nullable=False),
-        sa.Column("spreadsheet_link", sa.Text(), nullable=False),
+        sa.Column("spreadsheet_link", sa.Text(), nullable=True),
         sa.Column("user_id", sa.String(length=255), nullable=False),
         sa.PrimaryKeyConstraint("id", name="pk_sheet_sessions"),
         sa.UniqueConstraint(

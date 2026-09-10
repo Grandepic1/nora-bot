@@ -20,5 +20,5 @@ class SheetSession(Base):
         primary_key=True,
     )
     session_name: Mapped[str] = mapped_column(String(255))
-    spreadsheet_link: Mapped[str] = mapped_column(Text)
+    spreadsheet_link: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_id: Mapped[str] = mapped_column(String(255))
