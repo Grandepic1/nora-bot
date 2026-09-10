@@ -1,5 +1,6 @@
 import os
 import re
+from contextlib import contextmanager
 
 from dotenv import load_dotenv
 from google.oauth2.service_account import Credentials
@@ -8,41 +9,45 @@ from googleapiclient.discovery import build
 load_dotenv()
 
 SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets"
-    ]
+    "https://www.googleapis.com/auth/spreadsheets",
+]
+
 
 class GoogleSheetsService:
     def __init__(self):
-        credentials_path = os.getenv("GOOGLE_SERVICE_CLIENT_CRED_PATH")
+        self.credentials_path = os.getenv("GOOGLE_SERVICE_CLIENT_CRED_PATH")
 
-        if not credentials_path:
+        if not self.credentials_path:
             raise RuntimeError(
-            "GOOGLE_SERVICE_CRED_PATH is not configured"
+                "GOOGLE_SERVICE_CLIENT_CRED_PATH is not configured"
             )
 
+    @contextmanager
+    def _service(self):
         credentials = Credentials.from_service_account_file(
-            credentials_path,
-            scopes=SCOPES
+            self.credentials_path,
+            scopes=SCOPES,
         )
-
-        self.service = build(
+        service = build(
             "sheets",
             "v4",
             credentials=credentials,
-            cache_discovery=False
+            cache_discovery=False,
         )
+
+        try:
+            yield service
+        finally:
+            service.close()
 
     @staticmethod
     def _quote_sheet_name(sheet_name: str) -> str:
-        escaped = sheet_name.replace("'","''")
+        escaped = sheet_name.replace("'", "''")
         return f"'{escaped}'"
 
     @staticmethod
-    def extract_spreadsheet_id(
-        spreadsheet_url: str,
-    ) -> str:
+    def extract_spreadsheet_id(spreadsheet_url: str) -> str:
         pattern = r"/spreadsheets/d/([a-zA-Z0-9-_]+)"
-
         match = re.search(pattern, spreadsheet_url)
 
         if not match:
@@ -50,9 +55,10 @@ class GoogleSheetsService:
 
         return match.group(1)
 
-    def get_spreadsheet_info(self, spreadsheet_id:str) -> dict:
+    @staticmethod
+    def _get_spreadsheet_info(service, spreadsheet_id: str) -> dict:
         result = (
-            self.service.spreadsheets()
+            service.spreadsheets()
             .get(
                 spreadsheetId=spreadsheet_id,
                 fields=(
@@ -74,35 +80,25 @@ class GoogleSheetsService:
         for sheet in result.get("sheets", []):
             props = sheet["properties"]
             grid = props.get("gridProperties", {})
-
             sheets.append(
                 {
                     "sheet_id": props["sheetId"],
                     "title": props["title"],
                     "index": props["index"],
                     "row_count": grid.get("rowCount"),
-                    "column_count": grid.get("columnCount")
+                    "column_count": grid.get("columnCount"),
                 }
             )
 
         return {
             "spreadsheet_id": result["spreadsheetId"],
             "title": result["properties"]["title"],
-            "sheets":sheets
+            "sheets": sheets,
         }
 
-    def list_sheets(
-        self,
-        spreadsheet_id: str,
-    ) -> list[dict]:
-        return self.get_spreadsheet_info(spreadsheet_id)["sheets"]
-
-    def get_sheet(
-        self,
-        spreadsheet_id: str,
-        sheet_name: str,
-    ) -> dict:
-        sheets = self.list_sheets(spreadsheet_id)
+    @classmethod
+    def _get_sheet(cls, service, spreadsheet_id: str, sheet_name: str) -> dict:
+        sheets = cls._get_spreadsheet_info(service, spreadsheet_id)["sheets"]
 
         for sheet in sheets:
             if sheet["title"] == sheet_name:
@@ -110,15 +106,30 @@ class GoogleSheetsService:
 
         raise ValueError(f'Sheet "{sheet_name}" does not exist')
 
-    def get_sheet_id(
-        self,
+    @classmethod
+    def _get_sheet_id(
+        cls,
+        service,
         spreadsheet_id: str,
         sheet_name: str,
     ) -> int:
-        return self.get_sheet(
-            spreadsheet_id,
-            sheet_name,
-        )["sheet_id"]
+        return cls._get_sheet(service, spreadsheet_id, sheet_name)["sheet_id"]
+
+    def get_spreadsheet_info(self, spreadsheet_id: str) -> dict:
+        with self._service() as service:
+            return self._get_spreadsheet_info(service, spreadsheet_id)
+
+    def list_sheets(self, spreadsheet_id: str) -> list[dict]:
+        with self._service() as service:
+            return self._get_spreadsheet_info(service, spreadsheet_id)["sheets"]
+
+    def get_sheet(self, spreadsheet_id: str, sheet_name: str) -> dict:
+        with self._service() as service:
+            return self._get_sheet(service, spreadsheet_id, sheet_name)
+
+    def get_sheet_id(self, spreadsheet_id: str, sheet_name: str) -> int:
+        with self._service() as service:
+            return self._get_sheet_id(service, spreadsheet_id, sheet_name)
 
     def read_sheet(
         self,
@@ -127,15 +138,16 @@ class GoogleSheetsService:
     ) -> list[list]:
         range_name = self._quote_sheet_name(sheet_name)
 
-        result = (
-            self.service.spreadsheets()
-            .values()
-            .get(
-                spreadsheetId=spreadsheet_id,
-                range=range_name,
+        with self._service() as service:
+            result = (
+                service.spreadsheets()
+                .values()
+                .get(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                )
+                .execute()
             )
-            .execute()
-        )
 
         return result.get("values", [])
 
@@ -150,22 +162,19 @@ class GoogleSheetsService:
 
         sheet = self._quote_sheet_name(sheet_name)
 
-        result = (
-            self.service.spreadsheets()
-            .values()
-            .get(
-                spreadsheetId=spreadsheet_id,
-                range=f"{sheet}!{row_number}:{row_number}",
+        with self._service() as service:
+            result = (
+                service.spreadsheets()
+                .values()
+                .get(
+                    spreadsheetId=spreadsheet_id,
+                    range=f"{sheet}!{row_number}:{row_number}",
+                )
+                .execute()
             )
-            .execute()
-        )
 
         values = result.get("values", [])
-
-        if not values:
-            return []
-
-        return values[0]
+        return values[0] if values else []
 
     def append_rows(
         self,
@@ -178,23 +187,21 @@ class GoogleSheetsService:
 
         sheet = self._quote_sheet_name(sheet_name)
 
-        result = (
-            self.service.spreadsheets()
-            .values()
-            .append(
-                spreadsheetId=spreadsheet_id,
-                range=sheet,
-                valueInputOption="USER_ENTERED",
-                insertDataOption="INSERT_ROWS",
-                body={
-                    "values": values,
-                },
+        with self._service() as service:
+            result = (
+                service.spreadsheets()
+                .values()
+                .append(
+                    spreadsheetId=spreadsheet_id,
+                    range=sheet,
+                    valueInputOption="USER_ENTERED",
+                    insertDataOption="INSERT_ROWS",
+                    body={"values": values},
+                )
+                .execute()
             )
-            .execute()
-        )
 
         updates = result.get("updates", {})
-
         return {
             "updated_range": updates.get("updatedRange"),
             "updated_rows": updates.get("updatedRows", 0),
@@ -210,25 +217,23 @@ class GoogleSheetsService:
     ) -> dict:
         if row_number < 1:
             raise ValueError("row_number must be >= 1")
-
         if not values:
             raise ValueError("values cannot be empty")
 
         sheet = self._quote_sheet_name(sheet_name)
 
-        result = (
-            self.service.spreadsheets()
-            .values()
-            .update(
-                spreadsheetId=spreadsheet_id,
-                range=f"{sheet}!A{row_number}",
-                valueInputOption="USER_ENTERED",
-                body={
-                    "values": [values],
-                },
+        with self._service() as service:
+            result = (
+                service.spreadsheets()
+                .values()
+                .update(
+                    spreadsheetId=spreadsheet_id,
+                    range=f"{sheet}!A{row_number}",
+                    valueInputOption="USER_ENTERED",
+                    body={"values": [values]},
+                )
+                .execute()
             )
-            .execute()
-        )
 
         return {
             "updated_range": result.get("updatedRange"),
@@ -247,20 +252,19 @@ class GoogleSheetsService:
 
         sheet = self._quote_sheet_name(sheet_name)
 
-        result = (
-            self.service.spreadsheets()
-            .values()
-            .clear(
-                spreadsheetId=spreadsheet_id,
-                range=f"{sheet}!{row_number}:{row_number}",
-                body={},
+        with self._service() as service:
+            result = (
+                service.spreadsheets()
+                .values()
+                .clear(
+                    spreadsheetId=spreadsheet_id,
+                    range=f"{sheet}!{row_number}:{row_number}",
+                    body={},
+                )
+                .execute()
             )
-            .execute()
-        )
 
-        return {
-            "cleared_range": result.get("clearedRange"),
-        }
+        return {"cleared_range": result.get("clearedRange")}
 
     def delete_row(
         self,
@@ -271,35 +275,31 @@ class GoogleSheetsService:
         if row_number < 1:
             raise ValueError("row_number must be >= 1")
 
-        sheet_id = self.get_sheet_id(
-            spreadsheet_id,
-            sheet_name,
-        )
-
-        # API indexes rows from 0, while Sheets UI starts from 1.
         start_index = row_number - 1
 
-        (
-            self.service.spreadsheets()
-            .batchUpdate(
-                spreadsheetId=spreadsheet_id,
-                body={
-                    "requests": [
-                        {
-                            "deleteDimension": {
-                                "range": {
-                                    "sheetId": sheet_id,
-                                    "dimension": "ROWS",
-                                    "startIndex": start_index,
-                                    "endIndex": start_index + 1,
+        with self._service() as service:
+            sheet_id = self._get_sheet_id(service, spreadsheet_id, sheet_name)
+            (
+                service.spreadsheets()
+                .batchUpdate(
+                    spreadsheetId=spreadsheet_id,
+                    body={
+                        "requests": [
+                            {
+                                "deleteDimension": {
+                                    "range": {
+                                        "sheetId": sheet_id,
+                                        "dimension": "ROWS",
+                                        "startIndex": start_index,
+                                        "endIndex": start_index + 1,
+                                    }
                                 }
                             }
-                        }
-                    ]
-                },
+                        ]
+                    },
+                )
+                .execute()
             )
-            .execute()
-        )
 
         return {
             "deleted": True,
@@ -307,35 +307,25 @@ class GoogleSheetsService:
             "row_number": row_number,
         }
 
-    def create_sheet(
-        self,
-        spreadsheet_id: str,
-        title: str,
-    ) -> dict:
+    def create_sheet(self, spreadsheet_id: str, title: str) -> dict:
         if not title.strip():
             raise ValueError("Sheet title cannot be empty")
 
-        result = (
-            self.service.spreadsheets()
-            .batchUpdate(
-                spreadsheetId=spreadsheet_id,
-                body={
-                    "requests": [
-                        {
-                            "addSheet": {
-                                "properties": {
-                                    "title": title,
-                                }
-                            }
-                        }
-                    ]
-                },
+        with self._service() as service:
+            result = (
+                service.spreadsheets()
+                .batchUpdate(
+                    spreadsheetId=spreadsheet_id,
+                    body={
+                        "requests": [
+                            {"addSheet": {"properties": {"title": title}}}
+                        ]
+                    },
+                )
+                .execute()
             )
-            .execute()
-        )
 
         properties = result["replies"][0]["addSheet"]["properties"]
-
         return {
             "sheet_id": properties["sheetId"],
             "title": properties["title"],
@@ -351,31 +341,28 @@ class GoogleSheetsService:
         if not new_name.strip():
             raise ValueError("New sheet name cannot be empty")
 
-        sheet_id = self.get_sheet_id(
-            spreadsheet_id,
-            sheet_name,
-        )
-
-        (
-            self.service.spreadsheets()
-            .batchUpdate(
-                spreadsheetId=spreadsheet_id,
-                body={
-                    "requests": [
-                        {
-                            "updateSheetProperties": {
-                                "properties": {
-                                    "sheetId": sheet_id,
-                                    "title": new_name,
-                                },
-                                "fields": "title",
+        with self._service() as service:
+            sheet_id = self._get_sheet_id(service, spreadsheet_id, sheet_name)
+            (
+                service.spreadsheets()
+                .batchUpdate(
+                    spreadsheetId=spreadsheet_id,
+                    body={
+                        "requests": [
+                            {
+                                "updateSheetProperties": {
+                                    "properties": {
+                                        "sheetId": sheet_id,
+                                        "title": new_name,
+                                    },
+                                    "fields": "title",
+                                }
                             }
-                        }
-                    ]
-                },
+                        ]
+                    },
+                )
+                .execute()
             )
-            .execute()
-        )
 
         return {
             "renamed": True,
@@ -383,56 +370,42 @@ class GoogleSheetsService:
             "new_name": new_name,
         }
 
-    def clear_sheet(
-        self,
-        spreadsheet_id: str,
-        sheet_name: str,
-    ) -> dict:
+    def clear_sheet(self, spreadsheet_id: str, sheet_name: str) -> dict:
         sheet = self._quote_sheet_name(sheet_name)
 
-        result = (
-            self.service.spreadsheets()
-            .values()
-            .clear(
-                spreadsheetId=spreadsheet_id,
-                range=sheet,
-                body={},
+        with self._service() as service:
+            result = (
+                service.spreadsheets()
+                .values()
+                .clear(
+                    spreadsheetId=spreadsheet_id,
+                    range=sheet,
+                    body={},
+                )
+                .execute()
             )
-            .execute()
-        )
 
         return {
             "cleared": True,
             "sheet_name": sheet_name,
             "cleared_range": result.get("clearedRange"),
         }
-    
-    def delete_sheet(
-        self,
-        spreadsheet_id: str,
-        sheet_name: str,
-    ) -> dict:
-        sheet_id = self.get_sheet_id(
-            spreadsheet_id,
-            sheet_name,
-        )
 
-        (
-            self.service.spreadsheets()
-            .batchUpdate(
-                spreadsheetId=spreadsheet_id,
-                body={
-                    "requests": [
-                        {
-                            "deleteSheet": {
-                                "sheetId": sheet_id,
-                            }
-                        }
-                    ]
-                },
+    def delete_sheet(self, spreadsheet_id: str, sheet_name: str) -> dict:
+        with self._service() as service:
+            sheet_id = self._get_sheet_id(service, spreadsheet_id, sheet_name)
+            (
+                service.spreadsheets()
+                .batchUpdate(
+                    spreadsheetId=spreadsheet_id,
+                    body={
+                        "requests": [
+                            {"deleteSheet": {"sheetId": sheet_id}}
+                        ]
+                    },
+                )
+                .execute()
             )
-            .execute()
-        )
 
         return {
             "deleted": True,

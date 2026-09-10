@@ -1,9 +1,18 @@
+import asyncio
+
 from app.services.google_sheets import GoogleSheetsService
 
 
 sheets = GoogleSheetsService()
+SHEETS_LIMIT = asyncio.Semaphore(5)
 
-def list_sheets(
+
+async def _run_sheets(func, *args):
+    async with SHEETS_LIMIT:
+        return await asyncio.to_thread(func, *args)
+
+
+async def list_sheets(
     spreadsheet_id: str,
 ) -> list[dict]:
     """
@@ -17,9 +26,10 @@ def list_sheets(
         A list of sheets containing their names,
         IDs, indexes, row counts, and column counts.
     """
-    return sheets.list_sheets(spreadsheet_id)
+    return await _run_sheets(sheets.list_sheets, spreadsheet_id)
 
-def read_sheet(
+
+async def read_sheet(
     spreadsheet_id: str,
     sheet_name: str,
 ) -> list[list]:
@@ -36,12 +46,14 @@ def read_sheet(
     Returns:
         All populated rows from the sheet.
     """
-    return sheets.read_sheet(
+    return await _run_sheets(
+        sheets.read_sheet,
         spreadsheet_id,
         sheet_name,
     )
 
-def read_row(
+
+async def read_row(
     spreadsheet_id: str,
     sheet_name: str,
     row_number: int,
@@ -63,13 +75,15 @@ def read_row(
     Returns:
         Values contained in the requested row.
     """
-    return sheets.read_row(
+    return await _run_sheets(
+        sheets.read_row,
         spreadsheet_id,
         sheet_name,
         row_number,
     )
 
-def append_rows(
+
+async def append_rows(
     spreadsheet_id: str,
     sheet_name: str,
     values: list[list],
@@ -77,13 +91,15 @@ def append_rows(
     """
     Append one or more rows to the end of a sheet.
     """
-    return sheets.append_rows(
+    return await _run_sheets(
+        sheets.append_rows,
         spreadsheet_id,
         sheet_name,
         values,
     )
 
-def update_row(
+
+async def update_row(
     spreadsheet_id: str,
     sheet_name: str,
     row_number: int,
@@ -92,14 +108,16 @@ def update_row(
     """
     Replace values in an existing row.
     """
-    return sheets.update_row(
+    return await _run_sheets(
+        sheets.update_row,
         spreadsheet_id,
         sheet_name,
         row_number,
         values,
     )
 
-def clear_row(
+
+async def clear_row(
     spreadsheet_id: str,
     sheet_name: str,
     row_number: int,
@@ -107,13 +125,15 @@ def clear_row(
     """
     Clear all values from a row without deleting the row itself.
     """
-    return sheets.clear_row(
+    return await _run_sheets(
+        sheets.clear_row,
         spreadsheet_id,
         sheet_name,
         row_number,
     )
 
-def delete_row(
+
+async def delete_row(
     spreadsheet_id: str,
     sheet_name: str,
     row_number: int,
@@ -121,25 +141,29 @@ def delete_row(
     """
     Permanently delete a row and shift following rows upward.
     """
-    return sheets.delete_row(
+    return await _run_sheets(
+        sheets.delete_row,
         spreadsheet_id,
         sheet_name,
         row_number,
     )
 
-def create_sheet(
+
+async def create_sheet(
     spreadsheet_id: str,
     title: str,
 ) -> dict:
     """
     Create a new sheet/tab inside a spreadsheet.
     """
-    return sheets.create_sheet(
+    return await _run_sheets(
+        sheets.create_sheet,
         spreadsheet_id,
         title,
     )
 
-def rename_sheet(
+
+async def rename_sheet(
     spreadsheet_id: str,
     sheet_name: str,
     new_name: str,
@@ -147,32 +171,37 @@ def rename_sheet(
     """
     Rename an existing sheet/tab.
     """
-    return sheets.rename_sheet(
+    return await _run_sheets(
+        sheets.rename_sheet,
         spreadsheet_id,
         sheet_name,
         new_name,
     )
 
-def clear_sheet(
+
+async def clear_sheet(
     spreadsheet_id: str,
     sheet_name: str,
 ) -> dict:
     """
     Clear all values from a sheet while keeping the sheet itself.
     """
-    return sheets.clear_sheet(
+    return await _run_sheets(
+        sheets.clear_sheet,
         spreadsheet_id,
         sheet_name,
     )
 
-def delete_sheet(
+
+async def delete_sheet(
     spreadsheet_id: str,
     sheet_name: str,
 ) -> dict:
     """
     Permanently delete an entire sheet/tab.
     """
-    return sheets.delete_sheet(
+    return await _run_sheets(
+        sheets.delete_sheet,
         spreadsheet_id,
         sheet_name,
     )
