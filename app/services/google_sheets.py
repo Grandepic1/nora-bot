@@ -1,6 +1,7 @@
 import os
 import re
 from contextlib import contextmanager
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from google.oauth2.service_account import Credentials
@@ -46,14 +47,35 @@ class GoogleSheetsService:
         return f"'{escaped}'"
 
     @staticmethod
-    def extract_spreadsheet_id(spreadsheet_url: str) -> str:
-        pattern = r"/spreadsheets/d/([a-zA-Z0-9-_]+)"
-        match = re.search(pattern, spreadsheet_url)
+    def get_spreadsheet_id(url: str) -> str | None:
+        try:
+            parsed = urlparse(url)
 
-        if not match:
-            raise ValueError("Invalid Google Sheets URL")
+            if parsed.scheme not in {"http", "https"}:
+                return None
 
-        return match.group(1)
+            if parsed.netloc != "docs.google.com":
+                return None
+
+            parts = parsed.path.strip("/").split("/")
+
+            # Expected:
+            # /spreadsheets/d/{spreadsheet_id}/...
+            if len(parts) < 3:
+                return None
+
+            if parts[0] != "spreadsheets" or parts[1] != "d":
+                return None
+
+            spreadsheet_id = parts[2].strip()
+
+            if not spreadsheet_id:
+                return None
+
+            return spreadsheet_id
+
+        except Exception:
+            return None
 
     @staticmethod
     def _get_spreadsheet_info(service, spreadsheet_id: str) -> dict:

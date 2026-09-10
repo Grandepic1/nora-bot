@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from sqlalchemy import BigInteger, Identity, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.active_sheet_session import ActiveSheetSession
 
 
 class SheetSession(Base):
@@ -22,3 +29,7 @@ class SheetSession(Base):
     session_name: Mapped[str] = mapped_column(String(255))
     spreadsheet_link: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_id: Mapped[str] = mapped_column(String(255))
+
+    active_session: Mapped[ActiveSheetSession | None] = relationship(
+        back_populates="sheet_session"
+    )

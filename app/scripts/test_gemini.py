@@ -3,7 +3,7 @@ from app.services.google_sheets import GoogleSheetsService
 
 
 gemini = GeminiService()
-SPREADSHEET_ID = GoogleSheetsService().extract_spreadsheet_id(
+SPREADSHEET_ID = GoogleSheetsService().get_spreadsheet_id(
     "https://docs.google.com/spreadsheets/d/15KT6GxL953UTShmilWFgQ9D-dS5qiN_-gWasqlxddC4/edit?usp=sharing"
 )
 response = gemini.generate(f"""

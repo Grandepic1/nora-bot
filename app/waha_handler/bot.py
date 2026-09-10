@@ -2,6 +2,7 @@
 Waha Framework Handler with Discord Based Inspired
 """
 
+import asyncio
 import importlib
 import inspect
 import logging
@@ -11,6 +12,7 @@ import aiohttp
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.services.gemini import GeminiService
 from app.waha_handler.context import Context
 
 
@@ -30,13 +32,24 @@ class WahaBot:
         self.session_factory = session_factory
         self.prefix = prefix
         self.commands = {}
+        self.listeners = {}
+        self.conversation_locks: dict[
+            tuple[str | None, str | None],
+            asyncio.Lock,
+        ] = {}
+        self.conversation_tasks: dict[
+            tuple[str | None, str | None],
+            asyncio.Task[None],
+        ] = {}
         self.debug = debug
         self.extensions = []
         self.http: aiohttp.ClientSession | None = None
 
+        self.gemini = GeminiService()
         self.app = web.Application()
         self.app.cleanup_ctx.append(self._database_context)
         self.app.cleanup_ctx.append(self._http_context)
+        self.app.cleanup_ctx.append(self._gemini_context)
 
         self.app.router.add_post(
             "/webhook/waha",
@@ -66,21 +79,110 @@ class WahaBot:
         finally:
             await self.database_engine.dispose()
 
-    def command(self, name=None):
+    async def _gemini_context(self, app):
+        yield
+
+        await self.gemini.close()
+        self.conversation_locks.clear()
+        self.conversation_tasks.clear()
+
+    def _get_conversation_lock(
+        self,
+        session: str | None,
+        chat_id: str | None,
+    ) -> asyncio.Lock:
+        key = (session, chat_id)
+        lock = self.conversation_locks.get(key)
+
+        if lock is None:
+            lock = asyncio.Lock()
+            self.conversation_locks[key] = lock
+
+        return lock
+
+    def track_conversation_task(
+        self,
+        session: str | None,
+        chat_id: str | None,
+        task: asyncio.Task[None],
+    ) -> None:
+        key = (session, chat_id)
+        self.conversation_tasks[key] = task
+
+        def clear_finished(finished: asyncio.Task[None]) -> None:
+            if self.conversation_tasks.get(key) is finished:
+                self.conversation_tasks.pop(key, None)
+
+        task.add_done_callback(clear_finished)
+
+    async def _wait_for_conversation_task(
+        self,
+        session: str | None,
+        chat_id: str | None,
+    ) -> None:
+        task = self.conversation_tasks.get((session, chat_id))
+
+        if task is not None:
+            await task
+
+    async def _dispatch(self, event: str, ctx: Context):
+        listeners = self.listeners.get(event, [])
+
+        for listener in listeners:
+            await listener(ctx)
+
+    def command(
+        self,
+        name=None,
+        description: str | None = None,
+    ):
         def decorator(func):
             command_name = name or func.__name__
 
-            self.commands[command_name.lower()] = func
+            self.commands[command_name.lower()] = {
+                "func": func,
+                "description": description or "",
+            }
 
             return func
 
         return decorator
 
+    def listener(self, event: str):
+        def decorator(func):
+            self.listeners.setdefault(event, []).append(func)
+            return func
+        return decorator
+
+    async def _process_command(
+        self,
+        ctx: Context,
+        body: str,
+    ):
+        parts = body[len(self.prefix):].split()
+
+        if not parts:
+            return
+
+        command_name = parts[0].lower()
+        args = parts[1:]
+
+        command_data = self.commands.get(command_name)
+
+        if command_data is None:
+            return
+
+        command = command_data["func"]
+        await command(ctx, *args)
+
     async def _handle_webhook(self, request: web.Request):
         try:
             data = await request.json()
         except Exception:
-            data = {}
+            return web.json_response(
+                {"error": "Invalid JSON"},
+                status=400,
+            )
 
         if data.get("event") != "message":
             return web.json_response({"ok": True})
@@ -92,32 +194,43 @@ class WahaBot:
 
         body = (payload.get("body") or "").strip()
 
-        if not body.startswith(self.prefix):
+        if not body:
             return web.json_response({"ok": True})
 
-        parts = body[len(self.prefix) :].split()
+        conversation_lock = self._get_conversation_lock(
+            data.get("session"),
+            payload.get("from"),
+        )
 
-        if not parts:
-            return web.json_response({"ok": True})
-
-        command_name = parts[0].lower()
-        args = parts[1:]
-
-        command = self.commands.get(command_name)
-
-        if command:
-            try:
+        try:
+            async with conversation_lock:
                 async with self.session_factory() as db:
                     ctx = Context(self, data, db)
 
                     try:
-                        await command(ctx, *args)
+                        if body.startswith(self.prefix):
+                            await self._wait_for_conversation_task(
+                                ctx.session,
+                                ctx.chat_id,
+                            )
+                            await self._process_command(
+                                ctx,
+                                body,
+                            )
+                        else:
+                            await self._dispatch(
+                                "message",
+                                ctx,
+                            )
+
                         await db.commit()
+
                     except Exception:
                         await db.rollback()
                         raise
-            except Exception:
-                logging.exception("Command error")
+
+        except Exception:
+            logging.exception("Webhook handling error")
 
         return web.json_response({"ok": True})
 

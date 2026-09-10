@@ -32,3 +32,32 @@ class Context:
         ) as response:
             response.raise_for_status()
             return await response.json()
+
+    async def start_typing(self):
+        async with self.bot.http.post(
+            f"{self.bot.waha_url}/api/startTyping",
+            headers={
+                "X-Api-Key": self.bot.api_key,
+                "Content-Type": "application/json",
+            },
+            json={
+                "session": self.session,
+                "chatId": self.chat_id,
+            },
+        ) as response:
+            response.raise_for_status()
+
+
+    async def stop_typing(self):
+        async with self.bot.http.post(
+            f"{self.bot.waha_url}/api/stopTyping",
+            headers={
+                "X-Api-Key": self.bot.api_key,
+                "Content-Type": "application/json",
+            },
+            json={
+                "session": self.session,
+                "chatId": self.chat_id,
+            },
+        ) as response:
+            response.raise_for_status()
