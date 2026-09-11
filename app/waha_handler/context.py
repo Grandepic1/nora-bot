@@ -1,4 +1,3 @@
-import aiohttp
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -18,20 +17,11 @@ class Context:
         self.message_id = payload.get("id")
 
     async def send(self, message: str):
-        async with self.bot.http.post(
-            f"{self.bot.waha_url}/api/sendText",
-            headers={
-                "X-Api-Key": self.bot.api_key,
-                "Content-Type": "application/json",
-            },
-            json={
-                "session": self.session,
-                "chatId": self.chat_id,
-                "text": message,
-            }
-        ) as response:
-            response.raise_for_status()
-            return await response.json()
+        return await self.bot.send_text(
+            self.session,
+            self.chat_id,
+            message,
+        )
 
     async def start_typing(self):
         async with self.bot.http.post(

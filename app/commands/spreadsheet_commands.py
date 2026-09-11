@@ -131,10 +131,7 @@ async def setup(bot:WahaBot):
 
         await ctx.db.commit()
 
-        if (
-            previous_sheet_session_id is not None
-            and previous_sheet_session_id != sheet_session.id
-        ):
+        if previous_sheet_session_id is not None:
             await bot.gemini.remove_chat(previous_sheet_session_id)
 
         await ctx.send(

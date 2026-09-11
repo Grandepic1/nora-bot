@@ -49,6 +49,21 @@ async def setup(bot:WahaBot):
         async def send_response(text: str):
             await ctx.send(text)
 
+        user_id = ctx.sender
+        waha_session = ctx.session
+        chat_id = ctx.chat_id
+        sheet_session_id = sheet_session.id
+        session_name = sheet_session.session_name
+
+        async def deactivate_session() -> bool:
+            return await bot.deactivate_inactive_session(
+                user_id=user_id,
+                sheet_session_id=sheet_session_id,
+                session_name=session_name,
+                session=waha_session,
+                chat_id=chat_id,
+            )
+
         worker = await bot.gemini.queue_message(
             sheet_session_id=sheet_session.id,
             spreadsheet_id=spreadsheet_id,
@@ -56,6 +71,7 @@ async def setup(bot:WahaBot):
             callback=send_response,
             start_typing=ctx.start_typing,
             stop_typing=ctx.stop_typing,
+            deactivate=deactivate_session,
         )
         bot.track_conversation_task(
             ctx.session,

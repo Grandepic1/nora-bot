@@ -9,9 +9,10 @@ import logging
 
 from aiohttp import web
 import aiohttp
-from sqlalchemy import text
+from sqlalchemy import delete, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.models.active_sheet_session import ActiveSheetSession
 from app.services.gemini import GeminiService
 from app.waha_handler.context import Context
 
@@ -85,6 +86,69 @@ class WahaBot:
         await self.gemini.close()
         self.conversation_locks.clear()
         self.conversation_tasks.clear()
+
+    async def send_text(
+        self,
+        session: str | None,
+        chat_id: str | None,
+        message: str,
+    ):
+        if self.http is None:
+            raise RuntimeError("HTTP client is not available")
+
+        async with self.http.post(
+            f"{self.waha_url}/api/sendText",
+            headers={
+                "X-Api-Key": self.api_key,
+                "Content-Type": "application/json",
+            },
+            json={
+                "session": session,
+                "chatId": chat_id,
+                "text": message,
+            },
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
+    async def deactivate_inactive_session(
+        self,
+        user_id: str,
+        sheet_session_id: int,
+        session_name: str,
+        session: str | None,
+        chat_id: str | None,
+    ) -> bool:
+        conversation_lock = self._get_conversation_lock(session, chat_id)
+
+        async with conversation_lock:
+            async with self.session_factory() as db:
+                result = await db.execute(
+                    delete(ActiveSheetSession)
+                    .where(
+                        ActiveSheetSession.user_id == user_id,
+                        ActiveSheetSession.sheet_session_id == sheet_session_id,
+                    )
+                    .returning(ActiveSheetSession.user_id)
+                )
+                deactivated = result.scalar_one_or_none() is not None
+                await db.commit()
+
+            if not deactivated:
+                return False
+
+            try:
+                await self.send_text(
+                    session,
+                    chat_id,
+                    "Session dinonaktifkan karena tidak ada aktivitas "
+                    "selama 5 menit.\n"
+                    f"Gunakan `/start {session_name}` untuk memulai lagi.",
+                )
+            except Exception:
+                logging.exception("Failed to send inactivity notification")
+
+            return True
 
     def _get_conversation_lock(
         self,
