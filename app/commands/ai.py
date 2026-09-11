@@ -32,20 +32,19 @@ async def setup(bot:WahaBot):
 
         sheet_session = active_session.sheet_session
         spreadsheet_link = sheet_session.spreadsheet_link
+        spreadsheet_id = None
 
-        if not spreadsheet_link:
-            return
-
-        spreadsheet_id = GoogleSheetsService.get_spreadsheet_id(
-            spreadsheet_link
-        )
-
-        if spreadsheet_id is None:
-            await ctx.db.commit()
-            await ctx.send(
-                "Spreadsheet pada session ini tidak valid."
+        if spreadsheet_link:
+            spreadsheet_id = GoogleSheetsService.get_spreadsheet_id(
+                spreadsheet_link
             )
-            return
+
+            if spreadsheet_id is None:
+                await ctx.db.commit()
+                await ctx.send(
+                    "Spreadsheet pada session ini tidak valid."
+                )
+                return
 
         async def send_response(text: str):
             await ctx.send(text)

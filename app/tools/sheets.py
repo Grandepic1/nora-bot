@@ -3,8 +3,17 @@ import asyncio
 from app.services.google_sheets import GoogleSheetsService
 
 
-sheets = GoogleSheetsService()
+sheets: GoogleSheetsService | None = None
 SHEETS_LIMIT = asyncio.Semaphore(5)
+
+
+def _get_sheets() -> GoogleSheetsService:
+    global sheets
+
+    if sheets is None:
+        sheets = GoogleSheetsService()
+
+    return sheets
 
 
 async def _run_sheets(func, *args):
@@ -15,8 +24,9 @@ async def check_spreadsheet_access(
     spreadsheet_id: str,
 ) -> bool:
     try:
+        service = _get_sheets()
         await _run_sheets(
-            sheets.list_sheets,
+            service.list_sheets,
             spreadsheet_id,
         )
         return True
@@ -25,6 +35,8 @@ async def check_spreadsheet_access(
         return False
 
 def build_sheet_tools(spreadsheet_id: str) -> list:
+    service = _get_sheets()
+
     async def list_sheets(
     ) -> list[dict]:
         """
@@ -33,7 +45,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
             A list of sheets containing their names,
             IDs, indexes, row counts, and column counts.
         """
-        return await _run_sheets(sheets.list_sheets, spreadsheet_id)
+        return await _run_sheets(service.list_sheets, spreadsheet_id)
 
 
     async def read_sheet(
@@ -50,7 +62,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
             All populated rows from the sheet.
         """
         return await _run_sheets(
-            sheets.read_sheet,
+            service.read_sheet,
             spreadsheet_id,
             sheet_name,
         )
@@ -75,7 +87,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
             Values contained in the requested row.
         """
         return await _run_sheets(
-            sheets.read_row,
+            service.read_row,
             spreadsheet_id,
             sheet_name,
             row_number,
@@ -90,7 +102,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
         Append one or more rows to the end of a sheet.
         """
         return await _run_sheets(
-            sheets.append_rows,
+            service.append_rows,
             spreadsheet_id,
             sheet_name,
             values,
@@ -106,7 +118,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
         Replace values in an existing row.
         """
         return await _run_sheets(
-            sheets.update_row,
+            service.update_row,
             spreadsheet_id,
             sheet_name,
             row_number,
@@ -121,7 +133,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
         Create a new sheet/tab inside a spreadsheet.
         """
         return await _run_sheets(
-            sheets.create_sheet,
+            service.create_sheet,
             spreadsheet_id,
             title,
         )
@@ -135,7 +147,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
         Rename an existing sheet/tab.
         """
         return await _run_sheets(
-            sheets.rename_sheet,
+            service.rename_sheet,
             spreadsheet_id,
             sheet_name,
             new_name,
