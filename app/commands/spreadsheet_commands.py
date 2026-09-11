@@ -163,7 +163,10 @@ async def setup(bot:WahaBot):
             )
             return
 
-        can_access = await check_spreadsheet_access(spreadsheet_id)
+        can_access = await check_spreadsheet_access(
+            spreadsheet_id,
+            debug_log=bot.debug_log,
+        )
 
         if not can_access:
             await ctx.send(

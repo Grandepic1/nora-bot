@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -9,6 +8,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from app.debug_logging import DebugLogger
 from app.tools.sheets import build_sheet_tools
 
 load_dotenv()
@@ -45,7 +45,11 @@ class ChatState:
 
 
 class GeminiService:
-    def __init__(self, inactivity_seconds: float = 300.0):
+    def __init__(
+        self,
+        inactivity_seconds: float = 300.0,
+        debug_log: DebugLogger | None = None,
+    ):
         api_key = os.getenv("GEMINI_KEY")
 
         if not api_key:
@@ -56,11 +60,15 @@ class GeminiService:
         self.states: dict[int, ChatState] = {}
         self.debounce_seconds = 2.0
         self.inactivity_seconds = inactivity_seconds
+        self.debug_log = debug_log or DebugLogger(False)
         self.closing = False
 
     def _create_chat(self, spreadsheet_id: str | None):
         tool_providers = [
-            (spreadsheet_id, build_sheet_tools),
+            (
+                spreadsheet_id,
+                lambda feature: build_sheet_tools(feature, self.debug_log),
+            ),
         ]
         tools = [
             tool
@@ -68,6 +76,11 @@ class GeminiService:
             if feature is not None
             for tool in build_tools(feature)
         ]
+        self.debug_log.event(
+            "gemini.chat.created",
+            has_spreadsheet=spreadsheet_id is not None,
+            tool_count=len(tools),
+        )
 
         return self.client.aio.chats.create(
             model=self.model,
@@ -96,6 +109,11 @@ class GeminiService:
         deactivate: InactivityCallback,
     ) -> asyncio.Task[None]:
         if self.closing:
+            self.debug_log.event(
+                "gemini.queue.rejected",
+                sheet_session_id=sheet_session_id,
+                reason="service_closing",
+            )
             raise RuntimeError("Gemini service is shutting down")
 
         state = self.states.get(sheet_session_id)
@@ -103,7 +121,16 @@ class GeminiService:
         if state is None:
             state = ChatState(sheet_session_id, spreadsheet_id)
             self.states[sheet_session_id] = state
+            self.debug_log.event(
+                "gemini.state.created",
+                sheet_session_id=sheet_session_id,
+            )
         elif state.closed:
+            self.debug_log.event(
+                "gemini.queue.rejected",
+                sheet_session_id=sheet_session_id,
+                reason="state_closed",
+            )
             raise RuntimeError("Gemini chat is closing")
 
         await self._cancel_inactivity(state)
@@ -119,9 +146,19 @@ class GeminiService:
             )
         )
         state.last_queued_at = asyncio.get_running_loop().time()
+        self.debug_log.event(
+            "gemini.message.queued",
+            sheet_session_id=sheet_session_id,
+            queue_depth=len(state.messages),
+            has_spreadsheet=spreadsheet_id is not None,
+        )
 
         if state.worker is None or state.worker.done():
             state.worker = asyncio.create_task(self._run_worker(state))
+            self.debug_log.event(
+                "gemini.worker.started",
+                sheet_session_id=sheet_session_id,
+            )
 
         return state.worker
 
@@ -140,6 +177,12 @@ class GeminiService:
                     )
                     if delay <= 0:
                         break
+                    self.debug_log.event(
+                        "gemini.debounce.waiting",
+                        sheet_session_id=state.sheet_session_id,
+                        delay_ms=round(delay * 1000),
+                        queue_depth=len(state.messages),
+                    )
                     await asyncio.sleep(delay)
 
                 if state.closed:
@@ -149,12 +192,22 @@ class GeminiService:
                 state.messages.clear()
                 queued = batch[-1]
                 combined_message = "\n".join(item.text for item in batch)
+                processing_started_at = loop.time()
+                self.debug_log.event(
+                    "gemini.processing.started",
+                    sheet_session_id=state.sheet_session_id,
+                    batch_size=len(batch),
+                )
 
                 try:
                     try:
                         await queued.start_typing()
-                    except Exception:
-                        logging.exception("Failed to start typing indicator")
+                    except Exception as error:
+                        self.debug_log.failure(
+                            "gemini.typing_start.failed",
+                            error,
+                            sheet_session_id=state.sheet_session_id,
+                        )
 
                     async with state.lock:
                         if state.closed:
@@ -179,8 +232,16 @@ class GeminiService:
                             response_text = response.text or (
                                 "NORA tidak dapat menghasilkan respons."
                             )
-                except Exception:
-                    logging.exception("Gemini message processing failed")
+                except Exception as error:
+                    self.debug_log.failure(
+                        "gemini.processing.failed",
+                        error,
+                        sheet_session_id=state.sheet_session_id,
+                        batch_size=len(batch),
+                        duration_ms=round(
+                            (loop.time() - processing_started_at) * 1000
+                        ),
+                    )
                     response_text = (
                         "NORA mengalami kesalahan saat memproses pesan."
                     )
@@ -188,16 +249,33 @@ class GeminiService:
                 try:
                     if response_text is not None:
                         await queued.respond(response_text)
-                except Exception:
-                    logging.exception("Failed to send Gemini response")
+                except Exception as error:
+                    self.debug_log.failure(
+                        "gemini.response_delivery.failed",
+                        error,
+                        sheet_session_id=state.sheet_session_id,
+                    )
                 finally:
                     try:
                         await queued.stop_typing()
-                    except Exception:
-                        logging.exception("Failed to stop typing indicator")
+                    except Exception as error:
+                        self.debug_log.failure(
+                            "gemini.typing_stop.failed",
+                            error,
+                            sheet_session_id=state.sheet_session_id,
+                        )
 
                 state.last_activity_at = loop.time()
                 state.deactivate = queued.deactivate
+                self.debug_log.event(
+                    "gemini.processing.completed",
+                    sheet_session_id=state.sheet_session_id,
+                    batch_size=len(batch),
+                    duration_ms=round(
+                        (loop.time() - processing_started_at) * 1000
+                    ),
+                    remaining_queue_depth=len(state.messages),
+                )
         finally:
             if state.worker is current_task:
                 state.worker = None
@@ -214,6 +292,7 @@ class GeminiService:
         state.inactivity_generation += 1
         task = state.inactivity_task
         state.inactivity_task = None
+        had_active_timer = task is not None and not task.done()
 
         if (
             task is not None
@@ -223,11 +302,24 @@ class GeminiService:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
+        if had_active_timer:
+            self.debug_log.event(
+                "gemini.inactivity.cancelled",
+                sheet_session_id=state.sheet_session_id,
+                generation=state.inactivity_generation,
+            )
+
     def _start_inactivity_timer(self, state: ChatState) -> None:
         state.inactivity_generation += 1
         generation = state.inactivity_generation
         state.inactivity_task = asyncio.create_task(
             self._wait_for_inactivity(state, generation)
+        )
+        self.debug_log.event(
+            "gemini.inactivity.scheduled",
+            sheet_session_id=state.sheet_session_id,
+            generation=generation,
+            timeout_seconds=self.inactivity_seconds,
         )
 
     async def _wait_for_inactivity(
@@ -239,6 +331,11 @@ class GeminiService:
 
         try:
             await asyncio.sleep(self.inactivity_seconds)
+            self.debug_log.event(
+                "gemini.inactivity.timer_fired",
+                sheet_session_id=state.sheet_session_id,
+                generation=generation,
+            )
 
             if (
                 self.closing
@@ -249,17 +346,33 @@ class GeminiService:
                 or state.messages
                 or state.deactivate is None
             ):
+                self.debug_log.event(
+                    "gemini.inactivity.skipped",
+                    sheet_session_id=state.sheet_session_id,
+                    generation=generation,
+                )
                 return
 
-            await state.deactivate()
+            deactivated = await state.deactivate()
             state.closed = True
+            self.debug_log.event(
+                "gemini.inactivity.completed",
+                sheet_session_id=state.sheet_session_id,
+                generation=generation,
+                database_deactivated=deactivated,
+            )
 
             if self.states.get(state.sheet_session_id) is state:
                 self.states.pop(state.sheet_session_id, None)
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logging.exception("Failed to deactivate inactive Gemini session")
+        except Exception as error:
+            self.debug_log.failure(
+                "gemini.inactivity.failed",
+                error,
+                sheet_session_id=state.sheet_session_id,
+                generation=generation,
+            )
 
             if (
                 not self.closing
@@ -275,8 +388,17 @@ class GeminiService:
         state = self.states.get(sheet_session_id)
 
         if state is None:
+            self.debug_log.event(
+                "gemini.state.remove_skipped",
+                sheet_session_id=sheet_session_id,
+                reason="not_found",
+            )
             return
 
+        self.debug_log.event(
+            "gemini.state.removing",
+            sheet_session_id=sheet_session_id,
+        )
         state.closed = True
         await self._cancel_inactivity(state)
 
@@ -285,9 +407,17 @@ class GeminiService:
 
         if self.states.get(sheet_session_id) is state:
             self.states.pop(sheet_session_id, None)
+        self.debug_log.event(
+            "gemini.state.removed",
+            sheet_session_id=sheet_session_id,
+        )
 
     async def close(self) -> None:
         self.closing = True
+        self.debug_log.event(
+            "gemini.shutdown.started",
+            state_count=len(self.states),
+        )
 
         inactivity_tasks = [
             state.inactivity_task
@@ -318,6 +448,10 @@ class GeminiService:
                     timeout=30,
                 )
             except asyncio.TimeoutError:
+                self.debug_log.event(
+                    "gemini.shutdown.worker_timeout",
+                    worker_count=len(workers),
+                )
                 for worker in workers:
                     worker.cancel()
 
@@ -329,3 +463,4 @@ class GeminiService:
         self.states.clear()
 
         await self.client.aio.aclose()
+        self.debug_log.event("gemini.shutdown.completed")

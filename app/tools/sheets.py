@@ -1,5 +1,6 @@
 import asyncio
 
+from app.debug_logging import DebugLogger
 from app.services.google_sheets import GoogleSheetsService
 
 
@@ -16,25 +17,68 @@ def _get_sheets() -> GoogleSheetsService:
     return sheets
 
 
-async def _run_sheets(func, *args):
+async def _run_sheets(
+    func,
+    *args,
+    debug_log: DebugLogger | None = None,
+):
+    loop = asyncio.get_running_loop()
+    operation = func.__name__
+
+    if debug_log is not None:
+        debug_log.event("sheets.worker.queued", operation=operation)
+
     async with SHEETS_LIMIT:
-        return await asyncio.to_thread(func, *args)
+        started_at = loop.time()
+
+        if debug_log is not None:
+            debug_log.event("sheets.worker.started", operation=operation)
+
+        try:
+            result = await asyncio.to_thread(func, *args)
+        except Exception as error:
+            if debug_log is not None:
+                debug_log.failure(
+                    "sheets.worker.failed",
+                    error,
+                    operation=operation,
+                    duration_ms=round((loop.time() - started_at) * 1000),
+                )
+            raise
+
+        if debug_log is not None:
+            debug_log.event(
+                "sheets.worker.completed",
+                operation=operation,
+                duration_ms=round((loop.time() - started_at) * 1000),
+            )
+
+        return result
 
 async def check_spreadsheet_access(
     spreadsheet_id: str,
+    debug_log: DebugLogger | None = None,
 ) -> bool:
     try:
         service = _get_sheets()
         await _run_sheets(
             service.list_sheets,
             spreadsheet_id,
+            debug_log=debug_log,
         )
+        if debug_log is not None:
+            debug_log.event("sheets.access.checked", accessible=True)
         return True
 
     except Exception:
+        if debug_log is not None:
+            debug_log.event("sheets.access.checked", accessible=False)
         return False
 
-def build_sheet_tools(spreadsheet_id: str) -> list:
+def build_sheet_tools(
+    spreadsheet_id: str,
+    debug_log: DebugLogger | None = None,
+) -> list:
     service = _get_sheets()
 
     async def list_sheets(
@@ -45,7 +89,11 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
             A list of sheets containing their names,
             IDs, indexes, row counts, and column counts.
         """
-        return await _run_sheets(service.list_sheets, spreadsheet_id)
+        return await _run_sheets(
+            service.list_sheets,
+            spreadsheet_id,
+            debug_log=debug_log,
+        )
 
 
     async def read_sheet(
@@ -65,6 +113,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
             service.read_sheet,
             spreadsheet_id,
             sheet_name,
+            debug_log=debug_log,
         )
 
 
@@ -91,6 +140,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
             spreadsheet_id,
             sheet_name,
             row_number,
+            debug_log=debug_log,
         )
 
 
@@ -106,6 +156,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
             spreadsheet_id,
             sheet_name,
             values,
+            debug_log=debug_log,
         )
 
 
@@ -123,6 +174,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
             sheet_name,
             row_number,
             values,
+            debug_log=debug_log,
         )
 
 
@@ -136,6 +188,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
             service.create_sheet,
             spreadsheet_id,
             title,
+            debug_log=debug_log,
         )
 
 
@@ -151,6 +204,7 @@ def build_sheet_tools(spreadsheet_id: str) -> list:
             spreadsheet_id,
             sheet_name,
             new_name,
+            debug_log=debug_log,
         )
 
 

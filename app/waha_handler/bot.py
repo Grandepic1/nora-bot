@@ -5,13 +5,14 @@ Waha Framework Handler with Discord Based Inspired
 import asyncio
 import importlib
 import inspect
-import logging
+from collections.abc import Awaitable, Callable
 
 from aiohttp import web
 import aiohttp
 from sqlalchemy import delete, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.debug_logging import DebugLogger
 from app.models.active_sheet_session import ActiveSheetSession
 from app.services.gemini import GeminiService
 from app.waha_handler.context import Context
@@ -43,10 +44,11 @@ class WahaBot:
             asyncio.Task[None],
         ] = {}
         self.debug = debug
+        self.debug_log = DebugLogger(debug)
         self.extensions = []
         self.http: aiohttp.ClientSession | None = None
 
-        self.gemini = GeminiService()
+        self.gemini = GeminiService(debug_log=self.debug_log)
         self.app = web.Application()
         self.app.cleanup_ctx.append(self._database_context)
         self.app.cleanup_ctx.append(self._http_context)
@@ -64,52 +66,52 @@ class WahaBot:
     async def _http_context(self, app):
         timeout = aiohttp.ClientTimeout(total=10)
 
+        self.debug_log.event("http.client.opening")
         self.http = aiohttp.ClientSession(
             timeout=timeout
         )
+        self.debug_log.event("http.client.opened")
 
         yield
 
         await self.http.close()
+        self.debug_log.event("http.client.closed")
 
     async def _database_context(self, app: web.Application):
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+        self.debug_log.event("database.healthcheck.started")
+
         try:
-            async with self.database_engine.connect() as connection:
-                await connection.execute(text("SELECT 1"))
+            try:
+                async with self.database_engine.connect() as connection:
+                    await connection.execute(text("SELECT 1"))
+            except Exception as error:
+                self.debug_log.failure(
+                    "database.healthcheck.failed",
+                    error,
+                    duration_ms=round((loop.time() - started_at) * 1000),
+                )
+                raise
+
+            self.debug_log.event(
+                "database.healthcheck.completed",
+                duration_ms=round((loop.time() - started_at) * 1000),
+            )
             yield
         finally:
             await self.database_engine.dispose()
+            self.debug_log.event("database.engine.disposed")
 
     async def _gemini_context(self, app):
+        self.debug_log.event("gemini.lifecycle.started")
         yield
 
+        self.debug_log.event("gemini.lifecycle.closing")
         await self.gemini.close()
         self.conversation_locks.clear()
         self.conversation_tasks.clear()
-
-    async def send_text(
-        self,
-        session: str | None,
-        chat_id: str | None,
-        message: str,
-    ):
-        if self.http is None:
-            raise RuntimeError("HTTP client is not available")
-
-        async with self.http.post(
-            f"{self.waha_url}/api/sendText",
-            headers={
-                "X-Api-Key": self.api_key,
-                "Content-Type": "application/json",
-            },
-            json={
-                "session": session,
-                "chatId": chat_id,
-                "text": message,
-            },
-        ) as response:
-            response.raise_for_status()
-            return await response.json()
+        self.debug_log.event("gemini.lifecycle.closed")
 
     async def deactivate_inactive_session(
         self,
@@ -118,8 +120,13 @@ class WahaBot:
         session_name: str,
         session: str | None,
         chat_id: str | None,
+        notify: Callable[[str], Awaitable[None]],
     ) -> bool:
         conversation_lock = self._get_conversation_lock(session, chat_id)
+        self.debug_log.event(
+            "session.inactivity.deactivation_started",
+            sheet_session_id=sheet_session_id,
+        )
 
         async with conversation_lock:
             async with self.session_factory() as db:
@@ -135,18 +142,30 @@ class WahaBot:
                 await db.commit()
 
             if not deactivated:
+                self.debug_log.event(
+                    "session.inactivity.deactivation_skipped",
+                    sheet_session_id=sheet_session_id,
+                    reason="active_session_changed",
+                )
                 return False
 
             try:
-                await self.send_text(
-                    session,
-                    chat_id,
+                await notify(
                     "Session dinonaktifkan karena tidak ada aktivitas "
                     "selama 5 menit.\n"
                     f"Gunakan `/start {session_name}` untuk memulai lagi.",
                 )
-            except Exception:
-                logging.exception("Failed to send inactivity notification")
+            except Exception as error:
+                self.debug_log.failure(
+                    "session.inactivity.notification_failed",
+                    error,
+                    sheet_session_id=sheet_session_id,
+                )
+
+            self.debug_log.event(
+                "session.inactivity.deactivated",
+                sheet_session_id=sheet_session_id,
+            )
 
             return True
 
@@ -161,6 +180,7 @@ class WahaBot:
         if lock is None:
             lock = asyncio.Lock()
             self.conversation_locks[key] = lock
+            self.debug_log.event("conversation.lock.created")
 
         return lock
 
@@ -172,8 +192,21 @@ class WahaBot:
     ) -> None:
         key = (session, chat_id)
         self.conversation_tasks[key] = task
+        self.debug_log.event("conversation.task.tracked")
 
         def clear_finished(finished: asyncio.Task[None]) -> None:
+            if finished.cancelled():
+                status = "cancelled"
+            elif finished.exception() is not None:
+                status = "failed"
+            else:
+                status = "completed"
+
+            self.debug_log.event(
+                "conversation.task.finished",
+                status=status,
+            )
+
             if self.conversation_tasks.get(key) is finished:
                 self.conversation_tasks.pop(key, None)
 
@@ -187,13 +220,39 @@ class WahaBot:
         task = self.conversation_tasks.get((session, chat_id))
 
         if task is not None:
+            self.debug_log.event("conversation.task.waiting")
             await task
+            self.debug_log.event("conversation.task.wait_completed")
 
     async def _dispatch(self, event: str, ctx: Context):
         listeners = self.listeners.get(event, [])
 
-        for listener in listeners:
-            await listener(ctx)
+        for index, listener in enumerate(listeners):
+            loop = asyncio.get_running_loop()
+            started_at = loop.time()
+            self.debug_log.event(
+                "listener.dispatch.started",
+                event_name=event,
+                listener_index=index,
+                listener_count=len(listeners),
+            )
+            try:
+                await listener(ctx)
+            except Exception as error:
+                self.debug_log.failure(
+                    "listener.dispatch.failed",
+                    error,
+                    event_name=event,
+                    listener_index=index,
+                    duration_ms=round((loop.time() - started_at) * 1000),
+                )
+                raise
+            self.debug_log.event(
+                "listener.dispatch.completed",
+                event_name=event,
+                listener_index=index,
+                duration_ms=round((loop.time() - started_at) * 1000),
+            )
 
     def command(
         self,
@@ -234,32 +293,67 @@ class WahaBot:
         command_data = self.commands.get(command_name)
 
         if command_data is None:
+            self.debug_log.event("command.unrecognized")
             return
 
         command = command_data["func"]
-        await command(ctx, *args)
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+        self.debug_log.event(
+            "command.dispatch.started",
+            command=command_name,
+        )
+        try:
+            await command(ctx, *args)
+        except Exception as error:
+            self.debug_log.failure(
+                "command.dispatch.failed",
+                error,
+                command=command_name,
+                duration_ms=round((loop.time() - started_at) * 1000),
+            )
+            raise
+        self.debug_log.event(
+            "command.dispatch.completed",
+            command=command_name,
+            duration_ms=round((loop.time() - started_at) * 1000),
+        )
 
     async def _handle_webhook(self, request: web.Request):
         try:
             data = await request.json()
-        except Exception:
+        except Exception as error:
+            self.debug_log.failure("webhook.invalid_json", error)
             return web.json_response(
                 {"error": "Invalid JSON"},
                 status=400,
             )
 
         if data.get("event") != "message":
+            self.debug_log.event("webhook.ignored", reason="non_message_event")
             return web.json_response({"ok": True})
 
         payload = data.get("payload", {})
 
         if payload.get("fromMe"):
+            self.debug_log.event("webhook.ignored", reason="message_from_bot")
             return web.json_response({"ok": True})
 
         body = (payload.get("body") or "").strip()
 
         if not body:
+            self.debug_log.event("webhook.ignored", reason="empty_body")
             return web.json_response({"ok": True})
+
+        message_id = payload.get("id")
+        route = "command" if body.startswith(self.prefix) else "listener"
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+        self.debug_log.event(
+            "webhook.processing.started",
+            message_id=message_id,
+            route=route,
+        )
 
         conversation_lock = self._get_conversation_lock(
             data.get("session"),
@@ -267,7 +361,13 @@ class WahaBot:
         )
 
         try:
+            lock_started_at = loop.time()
             async with conversation_lock:
+                self.debug_log.event(
+                    "conversation.lock.acquired",
+                    message_id=message_id,
+                    wait_ms=round((loop.time() - lock_started_at) * 1000),
+                )
                 async with self.session_factory() as db:
                     ctx = Context(self, data, db)
 
@@ -288,13 +388,33 @@ class WahaBot:
                             )
 
                         await db.commit()
+                        self.debug_log.event(
+                            "database.transaction.committed",
+                            message_id=message_id,
+                        )
 
-                    except Exception:
+                    except Exception as error:
                         await db.rollback()
+                        self.debug_log.failure(
+                            "database.transaction.rolled_back",
+                            error,
+                            message_id=message_id,
+                        )
                         raise
 
-        except Exception:
-            logging.exception("Webhook handling error")
+        except Exception as error:
+            self.debug_log.failure(
+                "webhook.processing.failed",
+                error,
+                message_id=message_id,
+                duration_ms=round((loop.time() - started_at) * 1000),
+            )
+        else:
+            self.debug_log.event(
+                "webhook.processing.completed",
+                message_id=message_id,
+                duration_ms=round((loop.time() - started_at) * 1000),
+            )
 
         return web.json_response({"ok": True})
 
@@ -303,25 +423,44 @@ class WahaBot:
 
     async def _setup_extensions(self, app):
         for name in self.extensions:
-            module = importlib.import_module(name)
+            loop = asyncio.get_running_loop()
+            started_at = loop.time()
+            self.debug_log.event("extension.loading", extension=name)
 
-            setup = getattr(module, "setup", None)
+            try:
+                module = importlib.import_module(name)
 
-            if setup is None:
-                raise RuntimeError(
-                    f"Extension '{name}' has no setup(bot)"
+                setup = getattr(module, "setup", None)
+
+                if setup is None:
+                    raise RuntimeError(
+                        f"Extension '{name}' has no setup(bot)"
+                    )
+
+                result = setup(self)
+
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as error:
+                self.debug_log.failure(
+                    "extension.failed",
+                    error,
+                    extension=name,
                 )
+                raise
 
-            result = setup(self)
-
-            if inspect.isawaitable(result):
-                await result
+            self.debug_log.event(
+                "extension.loaded",
+                extension=name,
+                duration_ms=round((loop.time() - started_at) * 1000),
+            )
 
     def run(self, host="127.0.0.1", port=8000):
-        if self.debug:
-            logging.basicConfig(level=logging.DEBUG)
+        self.debug_log.event("bot.run", host=host, port=port)
         web.run_app(
             self.app,
             host=host,
-            port=port
+            port=port,
+            access_log=None,
+            print=None,
         )

@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 
+from app.debug_logging import DebugLogger
 from app.services.gemini import GeminiService
 
 
@@ -28,6 +29,7 @@ class GeminiInactivityTests(unittest.IsolatedAsyncioTestCase):
         service.debounce_seconds = 0
         service.inactivity_seconds = inactivity_seconds
         service.closing = False
+        service.debug_log = DebugLogger(False)
         service._create_chat = lambda spreadsheet_id: chat
         return service
 
