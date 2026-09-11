@@ -93,6 +93,8 @@ class GeminiService:
                     "available, ask them to set one first with "
                     "`/spreadsheet <Google Sheets URL>`. Never claim access "
                     "to unavailable tools or invent spreadsheet data."
+                    "For Read you can do it immediately."
+                    "For Create, Update, and Delete. And tell the user what will you do and ask the confirmation"
                 ),
                 tools=tools,
             ),
