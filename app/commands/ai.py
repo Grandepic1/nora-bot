@@ -1,8 +1,11 @@
+import secrets
+
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.models.active_sheet_session import ActiveSheetSession
 from app.services.google_sheets import GoogleSheetsService
+from app.services.pending_sheet_actions import ActionOrigin
 from app.waha_handler.bot import WahaBot
 from app.waha_handler.context import Context
 
@@ -72,6 +75,13 @@ async def setup(bot:WahaBot):
             start_typing=delivery.start_typing,
             stop_typing=delivery.stop_typing,
             deactivate=deactivate_session,
+            origin=ActionOrigin(
+                user_id=user_id,
+                waha_session=waha_session,
+                chat_id=chat_id,
+                message_id=ctx.message_id or secrets.token_urlsafe(12),
+                sheet_session_id=sheet_session_id,
+            ),
         )
         bot.track_conversation_task(
             ctx.session,

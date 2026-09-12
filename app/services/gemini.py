@@ -1,6 +1,7 @@
 import asyncio
 import os
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -9,6 +10,7 @@ from google import genai
 from google.genai import types
 
 from app.debug_logging import DebugLogger
+from app.services.pending_sheet_actions import ActionOrigin
 from app.tools.sheets import build_sheet_tools
 
 load_dotenv()
@@ -16,6 +18,14 @@ load_dotenv()
 AsyncCallback = Callable[[], Awaitable[None]]
 ResponseCallback = Callable[[str], Awaitable[None]]
 InactivityCallback = Callable[[], Awaitable[bool]]
+PendingActionCallback = Callable[
+    [ActionOrigin, str, str, dict[str, Any]],
+    Awaitable[dict[str, Any]],
+]
+PendingActionManagerCallback = Callable[
+    [ActionOrigin, str, str],
+    Awaitable[dict[str, Any]],
+]
 
 
 @dataclass
@@ -25,6 +35,7 @@ class QueuedMessage:
     start_typing: AsyncCallback
     stop_typing: AsyncCallback
     deactivate: InactivityCallback
+    origin: ActionOrigin | None = None
 
 
 @dataclass
@@ -49,6 +60,8 @@ class GeminiService:
         self,
         inactivity_seconds: float = 300.0,
         debug_log: DebugLogger | None = None,
+        create_pending_action: PendingActionCallback | None = None,
+        manage_pending_action: PendingActionManagerCallback | None = None,
     ):
         api_key = os.getenv("GEMINI_KEY")
 
@@ -62,12 +75,58 @@ class GeminiService:
         self.inactivity_seconds = inactivity_seconds
         self.debug_log = debug_log or DebugLogger(False)
         self.closing = False
+        self.create_pending_action = create_pending_action
+        self.manage_pending_action = manage_pending_action
+        self.current_action_origin: ContextVar[ActionOrigin | None] = ContextVar(
+            "current_action_origin",
+            default=None,
+        )
 
     def _create_chat(self, spreadsheet_id: str | None):
+        async def create_pending_action(
+            operation: str,
+            arguments: dict[str, Any],
+        ) -> dict[str, Any]:
+            origin = self.current_action_origin.get()
+            if origin is None or self.create_pending_action is None:
+                raise RuntimeError("Sheet confirmation is not available")
+            return await self.create_pending_action(
+                origin,
+                spreadsheet_id,
+                operation,
+                arguments,
+            )
+
+        async def manage_pending_action(
+            choice: str,
+            confirmation_code: str,
+        ) -> dict[str, Any]:
+            origin = self.current_action_origin.get()
+            if origin is None or self.manage_pending_action is None:
+                raise RuntimeError("Sheet confirmation is not available")
+            return await self.manage_pending_action(
+                origin,
+                choice,
+                confirmation_code,
+            )
+
         tool_providers = [
             (
                 spreadsheet_id,
-                lambda feature: build_sheet_tools(feature, self.debug_log),
+                lambda feature: build_sheet_tools(
+                    feature,
+                    self.debug_log,
+                    create_pending_action=(
+                        create_pending_action
+                        if self.create_pending_action is not None
+                        else None
+                    ),
+                    manage_pending_action=(
+                        manage_pending_action
+                        if self.manage_pending_action is not None
+                        else None
+                    ),
+                ),
             ),
         ]
         tools = [
@@ -92,9 +151,16 @@ class GeminiService:
                     "or modify a spreadsheet and no spreadsheet tools are "
                     "available, ask them to set one first with "
                     "`/spreadsheet <Google Sheets URL>`. Never claim access "
-                    "to unavailable tools or invent spreadsheet data."
-                    "For Read you can do it immediately."
-                    "For Create, Update, and Delete. And tell the user what will you do and ask the confirmation"
+                    "to unavailable tools or invent spreadsheet data. "
+                    "Reads can be performed immediately. For every write, call "
+                    "the relevant tool to prepare a pending action. When it "
+                    "returns pending_confirmation, explain the summary and "
+                    "ask whether the user wants to confirm, see a preview, "
+                    "or cancel. Do not call a confirmation tool or choose for "
+                    "the user in that same turn. On a later user message, "
+                    "interpret their choice and call exactly one matching "
+                    "confirmation tool with the pending confirmation code. "
+                    "Only generate a preview link when they ask for preview."
                 ),
                 tools=tools,
             ),
@@ -109,6 +175,7 @@ class GeminiService:
         start_typing: AsyncCallback,
         stop_typing: AsyncCallback,
         deactivate: InactivityCallback,
+        origin: ActionOrigin | None = None,
     ) -> asyncio.Task[None]:
         if self.closing:
             self.debug_log.event(
@@ -145,6 +212,7 @@ class GeminiService:
                 start_typing=start_typing,
                 stop_typing=stop_typing,
                 deactivate=deactivate,
+                origin=origin,
             )
         )
         state.last_queued_at = asyncio.get_running_loop().time()
@@ -227,9 +295,23 @@ class GeminiService:
                                     state.spreadsheet_id
                                 )
 
-                            response = await state.chat.send_message(
-                                combined_message
+                            origin_context = getattr(
+                                self,
+                                "current_action_origin",
+                                None,
                             )
+                            if origin_context is None:
+                                response = await state.chat.send_message(
+                                    combined_message
+                                )
+                            else:
+                                origin_token = origin_context.set(queued.origin)
+                                try:
+                                    response = await state.chat.send_message(
+                                        combined_message
+                                    )
+                                finally:
+                                    origin_context.reset(origin_token)
 
                             response_text = response.text or (
                                 "NORA tidak dapat menghasilkan respons."

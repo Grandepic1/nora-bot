@@ -1,4 +1,6 @@
 import asyncio
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from app.debug_logging import DebugLogger
 from app.services.google_sheets import GoogleSheetsService
@@ -6,6 +8,14 @@ from app.services.google_sheets import GoogleSheetsService
 
 sheets: GoogleSheetsService | None = None
 SHEETS_LIMIT = asyncio.Semaphore(5)
+PendingActionCreator = Callable[
+    [str, dict[str, Any]],
+    Awaitable[dict[str, Any]],
+]
+PendingActionManager = Callable[
+    [str, str],
+    Awaitable[dict[str, Any]],
+]
 
 
 def _get_sheets() -> GoogleSheetsService:
@@ -78,6 +88,8 @@ async def check_spreadsheet_access(
 def build_sheet_tools(
     spreadsheet_id: str,
     debug_log: DebugLogger | None = None,
+    create_pending_action: PendingActionCreator | None = None,
+    manage_pending_action: PendingActionManager | None = None,
 ) -> list:
     service = _get_sheets()
 
@@ -149,14 +161,11 @@ def build_sheet_tools(
         values: list[list],
     ) -> dict:
         """
-        Append one or more rows to the end of a sheet.
+        Prepare rows to append and request user confirmation.
         """
-        return await _run_sheets(
-            service.append_rows,
-            spreadsheet_id,
-            sheet_name,
-            values,
-            debug_log=debug_log,
+        return await create_pending_action(
+            "append_rows",
+            {"sheet_name": sheet_name, "values": values},
         )
 
 
@@ -166,15 +175,15 @@ def build_sheet_tools(
         values: list,
     ) -> dict:
         """
-        Replace values in an existing row.
+        Prepare replacement values and request user confirmation.
         """
-        return await _run_sheets(
-            service.update_row,
-            spreadsheet_id,
-            sheet_name,
-            row_number,
-            values,
-            debug_log=debug_log,
+        return await create_pending_action(
+            "update_row",
+            {
+                "sheet_name": sheet_name,
+                "row_number": row_number,
+                "values": values,
+            },
         )
 
 
@@ -182,13 +191,11 @@ def build_sheet_tools(
         title: str,
     ) -> dict:
         """
-        Create a new sheet/tab inside a spreadsheet.
+        Prepare a new sheet/tab and request user confirmation.
         """
-        return await _run_sheets(
-            service.create_sheet,
-            spreadsheet_id,
-            title,
-            debug_log=debug_log,
+        return await create_pending_action(
+            "create_sheet",
+            {"title": title},
         )
 
 
@@ -197,23 +204,38 @@ def build_sheet_tools(
         new_name: str,
     ) -> dict:
         """
-        Rename an existing sheet/tab.
+        Prepare a sheet/tab rename and request user confirmation.
         """
-        return await _run_sheets(
-            service.rename_sheet,
-            spreadsheet_id,
-            sheet_name,
-            new_name,
-            debug_log=debug_log,
+        return await create_pending_action(
+            "rename_sheet",
+            {"sheet_name": sheet_name, "new_name": new_name},
         )
 
+    async def confirm_sheet_action(confirmation_code: str) -> dict:
+        """Confirm and apply a pending sheet action after the user agrees."""
+        return await manage_pending_action("confirm", confirmation_code)
 
-    return [
+    async def preview_sheet_action(confirmation_code: str) -> dict:
+        """Generate a preview link after the user asks to see the preview."""
+        return await manage_pending_action("preview", confirmation_code)
+
+    async def cancel_sheet_action(confirmation_code: str) -> dict:
+        """Cancel a pending sheet action after the user declines it."""
+        return await manage_pending_action("cancel", confirmation_code)
+
+
+    read_tools = [
         list_sheets,
         read_sheet,
         read_row,
-        append_rows,
-        update_row,
-        create_sheet,
-        rename_sheet,
     ]
+    if create_pending_action is None:
+        return read_tools
+    tools = read_tools + [append_rows, update_row, create_sheet, rename_sheet]
+    if manage_pending_action is not None:
+        tools += [
+            confirm_sheet_action,
+            preview_sheet_action,
+            cancel_sheet_action,
+        ]
+    return tools

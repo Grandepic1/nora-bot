@@ -15,6 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from app.debug_logging import DebugLogger
 from app.models.active_sheet_session import ActiveSheetSession
 from app.services.gemini import GeminiService
+from app.services.pending_sheet_actions import (
+    InvalidActionEdit,
+    PendingSheetActionService,
+)
+from app.views.sheet_preview import render_sheet_preview
 from app.waha_handler.context import Context
 
 
@@ -27,6 +32,8 @@ class WahaBot:
         session_factory: async_sessionmaker[AsyncSession],
         prefix: str = "/",
         debug: bool = False,
+        public_base_url: str = "http://127.0.0.1:8000",
+        sheet_action_ttl_seconds: int = 900,
     ):
         self.waha_url = waha_url.rstrip("/")
         self.api_key = api_key
@@ -48,7 +55,17 @@ class WahaBot:
         self.extensions = []
         self.http: aiohttp.ClientSession | None = None
 
-        self.gemini = GeminiService(debug_log=self.debug_log)
+        self.pending_sheet_actions = PendingSheetActionService(
+            session_factory,
+            public_base_url,
+            sheet_action_ttl_seconds,
+            self.debug_log,
+        )
+        self.gemini = GeminiService(
+            debug_log=self.debug_log,
+            create_pending_action=self.pending_sheet_actions.create_action,
+            manage_pending_action=self.pending_sheet_actions.handle_ai_action,
+        )
         self.app = web.Application()
         self.app.cleanup_ctx.append(self._database_context)
         self.app.cleanup_ctx.append(self._http_context)
@@ -57,6 +74,14 @@ class WahaBot:
         self.app.router.add_post(
             "/webhook/waha",
             self._handle_webhook,
+        )
+        self.app.router.add_get(
+            "/preview/{token}",
+            self._handle_sheet_preview,
+        )
+        self.app.router.add_post(
+            "/preview/{token}",
+            self._handle_sheet_preview_apply,
         )
 
         self.app.on_startup.append(
@@ -109,6 +134,7 @@ class WahaBot:
 
         self.debug_log.event("gemini.lifecycle.closing")
         await self.gemini.close()
+        await self.pending_sheet_actions.close()
         self.conversation_locks.clear()
         self.conversation_tasks.clear()
         self.debug_log.event("gemini.lifecycle.closed")
@@ -417,6 +443,74 @@ class WahaBot:
             )
 
         return web.json_response({"ok": True})
+
+    async def _handle_sheet_preview(self, request: web.Request):
+        action = await self.pending_sheet_actions.get_by_token(
+            request.match_info["token"]
+        )
+        return web.Response(
+            text=render_sheet_preview(action),
+            content_type="text/html",
+            status=200 if action is not None else 404,
+            headers=self._preview_headers(),
+        )
+
+    async def _handle_sheet_preview_apply(self, request: web.Request):
+        token = request.match_info["token"]
+        try:
+            form = await request.post()
+            edits = {key: str(value) for key, value in form.items()}
+            outcome = await self.pending_sheet_actions.confirm_token(
+                token,
+                edits,
+            )
+        except InvalidActionEdit as error:
+            action = await self.pending_sheet_actions.get_by_token(token)
+            return web.Response(
+                text=render_sheet_preview(action, error=str(error)),
+                content_type="text/html",
+                status=400,
+                headers=self._preview_headers(),
+            )
+
+        if (
+            outcome.completed_now
+            and outcome.chat_id is not None
+        ):
+            delivery = Context(
+                self,
+                {
+                    "session": outcome.waha_session,
+                    "payload": {"from": outcome.chat_id},
+                },
+                None,
+            )
+            try:
+                await delivery.send(outcome.message)
+            except Exception as error:
+                self.debug_log.failure(
+                    "sheet_action.notification_failed",
+                    error,
+                    status=outcome.status,
+                )
+
+        raise web.HTTPSeeOther(
+            location=request.path,
+            headers=self._preview_headers(),
+        )
+
+    @staticmethod
+    def _preview_headers() -> dict[str, str]:
+        return {
+            "Cache-Control": "no-store",
+            "Content-Security-Policy": (
+                "default-src 'none'; style-src 'unsafe-inline'; "
+                "form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+            ),
+            "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
+        }
 
     def load_extension(self, name: str):
         self.extensions.append(name)
