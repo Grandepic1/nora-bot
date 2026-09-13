@@ -43,4 +43,7 @@ class DebugLogger:
             return
 
         fields["error_type"] = type(error).__name__
-        self._logger.debug(self._format(event, fields))
+        self._logger.debug(
+            self._format(event, fields),
+            exc_info=(type(error), error, error.__traceback__),
+        )

@@ -14,19 +14,23 @@ class DebugLoggerTests(unittest.TestCase):
 
         self.assertEqual(output.getvalue(), "")
 
-    def test_enabled_logger_emits_safe_key_value_fields(self):
+    def test_enabled_logger_emits_original_exception(self):
         output = io.StringIO()
         logger = DebugLogger(True, stream=output)
 
         logger.event("test.event", duration_ms=12)
-        logger.failure("test.failure", RuntimeError("secret"))
+        try:
+            raise RuntimeError("Quota exceeded")
+        except RuntimeError as error:
+            logger.failure("test.failure", error)
 
         rendered = output.getvalue()
         self.assertIn("event=test.event", rendered)
         self.assertIn("duration_ms=12", rendered)
         self.assertIn("event=test.failure", rendered)
         self.assertIn("error_type='RuntimeError'", rendered)
-        self.assertNotIn("secret", rendered)
+        self.assertIn("Traceback (most recent call last):", rendered)
+        self.assertIn("RuntimeError: Quota exceeded", rendered)
 
 
 if __name__ == "__main__":
