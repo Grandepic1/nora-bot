@@ -1,0 +1,20 @@
+<section class="flex flex-wrap items-center gap-x-10 gap-y-3 rounded-2xl border border-line bg-white px-5 py-4 shadow-sm">
+	<div class="flex items-center gap-3">
+		<span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface text-ink/50" aria-hidden="true">
+			<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" class="size-4">
+				<rect x="1.5" y="2.5" width="13" height="11" rx="1.5"></rect>
+				<path d="M1.5 6h13M1.5 9.5h13M6 6v7.5M10 6v7.5"></path>
+			</svg>
+		</span>
+		<div class="flex flex-col">
+			<span class="text-xs text-secondary">Spreadsheet</span>
+			<span class="text-sm font-medium text-ink">{{ spreadsheet.name }}</span>
+			<span class="mt-0.5 text-xs text-secondary">{{ summary }}</span>
+		</div>
+	</div>
+
+	<span class="ml-auto inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+		<span class="size-1.5 rounded-full bg-success" aria-hidden="true"></span>
+		{{ "Siap dikonfirmasi" if pending else "Status akhir" }}
+	</span>
+</section>

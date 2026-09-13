@@ -11,3 +11,6 @@ wheels/
 .env
 
 credentials/
+
+# Frontend dependencies
+node_modules/

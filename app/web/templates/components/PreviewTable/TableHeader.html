@@ -1,0 +1,6 @@
+<tr>
+	<th scope="col" class="w-10 border border-line bg-surface px-2 py-2.5 text-right text-xs font-medium tabular-nums text-secondary">#</th>
+	{% for column in columns %}
+		<th scope="col" class="min-w-36 border border-line bg-surface px-3 py-2.5 text-left text-sm font-semibold text-ink">{{ column }}</th>
+	{% endfor %}
+</tr>

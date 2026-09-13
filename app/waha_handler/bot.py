@@ -6,6 +6,7 @@ import asyncio
 import importlib
 import inspect
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 from aiohttp import web
 import aiohttp
@@ -19,7 +20,7 @@ from app.services.pending_sheet_actions import (
     InvalidActionEdit,
     PendingSheetActionService,
 )
-from app.views.sheet_preview import render_sheet_preview
+from app.web.views.sheet_preview import render_sheet_preview
 from app.waha_handler.context import Context
 
 
@@ -82,6 +83,10 @@ class WahaBot:
         self.app.router.add_post(
             "/preview/{token}",
             self._handle_sheet_preview_apply,
+        )
+        self.app.router.add_static(
+            "/static/",
+            Path(__file__).resolve().parents[1] / "web" / "static",
         )
 
         self.app.on_startup.append(
@@ -504,7 +509,7 @@ class WahaBot:
         return {
             "Cache-Control": "no-store",
             "Content-Security-Policy": (
-                "default-src 'none'; style-src 'unsafe-inline'; "
+                "default-src 'none'; style-src 'self'; "
                 "form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
             ),
             "Referrer-Policy": "no-referrer",

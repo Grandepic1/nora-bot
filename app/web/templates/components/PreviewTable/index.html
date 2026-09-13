@@ -1,0 +1,12 @@
+<div class="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+	<table class="w-full border-separate border-spacing-0 text-left">
+		<thead>
+			{% include "components/PreviewTable/TableHeader.html" %}
+		</thead>
+		<tbody>
+			{% for row in rows %}
+				{% include "components/PreviewTable/TableRow.html" %}
+			{% endfor %}
+		</tbody>
+	</table>
+</div>

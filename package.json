@@ -1,0 +1,11 @@
+{
+	"name": "waha",
+	"private": true,
+	"scripts": {
+		"build:css": "tailwindcss -i ./app/web/styles/index.css -o ./app/web/static/index.css --minify"
+	},
+	"devDependencies": {
+		"@tailwindcss/cli": "^4.3.3",
+		"tailwindcss": "^4.3.3"
+	}
+}

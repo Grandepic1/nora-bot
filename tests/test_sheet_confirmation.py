@@ -7,7 +7,7 @@ from app.services.pending_sheet_actions import (
     InvalidActionEdit,
     PendingSheetActionService,
 )
-from app.views.sheet_preview import render_sheet_preview
+from app.web.views.sheet_preview import render_sheet_preview
 
 
 class FakeSheets:
@@ -128,6 +128,8 @@ class SheetPreviewTests(unittest.TestCase):
         self.assertIn("Budget &lt;2026&gt;", html)
         self.assertIn('value="A&amp;B"', html)
         self.assertNotIn("Budget <2026>", html)
+        self.assertIn('href="/static/index.css"', html)
+        self.assertNotIn("<style>", html)
 
     def test_completed_preview_has_no_apply_form(self):
         html = render_sheet_preview(self.make_action(status="succeeded"))

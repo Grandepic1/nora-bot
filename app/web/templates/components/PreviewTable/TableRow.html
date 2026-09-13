@@ -1,0 +1,6 @@
+<tr>
+	<th scope="row" class="w-10 select-none border border-line bg-surface/50 px-2 py-2 text-right text-xs font-medium tabular-nums text-secondary">{{ row.number }}</th>
+	{% for cell in row.cells %}
+		{% include "components/PreviewTable/EditableCell.html" %}
+	{% endfor %}
+</tr>
