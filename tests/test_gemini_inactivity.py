@@ -2,7 +2,7 @@ import asyncio
 import unittest
 
 from app.debug_logging import DebugLogger
-from app.services.gemini import GeminiService
+from app.services.gemini import GeminiService, SYSTEM_INSTRUCTION
 
 
 class FakeResponse:
@@ -106,6 +106,11 @@ class GeminiInactivityTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(deactivation_count, 0)
         self.assertNotIn(1, service.states)
+
+    def test_system_instruction_targets_whatsapp_output(self):
+        self.assertIn("through WhatsApp", SYSTEM_INSTRUCTION)
+        self.assertIn("complete raw URL on its own line", SYSTEM_INSTRUCTION)
+        self.assertIn("never show or mention", SYSTEM_INSTRUCTION)
 
 
 if __name__ == "__main__":

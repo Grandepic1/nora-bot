@@ -161,7 +161,11 @@ class PendingSheetActionService:
         minutes = max(1, math.ceil(remaining / 60))
         return ActionOutcome(
             "pending",
-            f"Preview: {url}\nLink berlaku selama {minutes} menit.",
+            (
+                "Berikut link pratinjaunya:\n"
+                f"{url}\n\n"
+                f"Link berlaku selama {minutes} menit."
+            ),
             code=action.code,
         )
 
@@ -217,7 +221,7 @@ class PendingSheetActionService:
 
         return ActionOutcome(
             "cancelled",
-            f"Aksi `{action.code}` dibatalkan.",
+            "Perubahan dibatalkan.",
             code=action.code,
         )
 
@@ -347,9 +351,9 @@ class PendingSheetActionService:
                 stored.processed_at = processed_at
 
         if status == "succeeded":
-            message = f"Aksi `{action.code}` berhasil diterapkan ke Google Sheets."
+            message = "Perubahan berhasil diterapkan ke Google Sheets."
         else:
-            message = f"Aksi `{action.code}` tidak diterapkan. {public_error}"
+            message = f"Perubahan tidak diterapkan. {public_error}"
 
         return ActionOutcome(
             status,
@@ -375,7 +379,7 @@ class PendingSheetActionService:
             action.processed_at = now
             return ActionOutcome(
                 "expired",
-                f"Aksi `{action.code}` sudah kedaluwarsa.",
+                "Konfirmasi sudah kedaluwarsa.",
                 code=action.code,
             )
         if await self._is_stale(db, action):
