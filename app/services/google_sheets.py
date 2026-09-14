@@ -47,6 +47,37 @@ class GoogleSheetsService:
         return f"'{escaped}'"
 
     @staticmethod
+    def normalize_cell_range(cell_range: str) -> str:
+        normalized = cell_range.strip().upper()
+        if (
+            not normalized
+            or len(normalized) > 100
+            or "!" in normalized
+            or not re.fullmatch(
+                r"(?:[A-Z]+\d+(?::[A-Z]+\d*)?|[A-Z]+:[A-Z]+|\d+:\d+)",
+                normalized,
+            )
+            or any(int(row) < 1 for row in re.findall(r"\d+", normalized))
+        ):
+            raise ValueError("cell_range must use A1 notation, such as K20:M30")
+        return normalized
+
+    @classmethod
+    def _qualified_range(cls, sheet_name: str, cell_range: str) -> str:
+        return (
+            f"{cls._quote_sheet_name(sheet_name)}!"
+            f"{cls.normalize_cell_range(cell_range)}"
+        )
+
+    @staticmethod
+    def _column_name(number: int) -> str:
+        name = ""
+        while number:
+            number, remainder = divmod(number - 1, 26)
+            name = chr(65 + remainder) + name
+        return name
+
+    @staticmethod
     def get_spreadsheet_id(url: str) -> str | None:
         try:
             parsed = urlparse(url)
@@ -198,16 +229,88 @@ class GoogleSheetsService:
         values = result.get("values", [])
         return values[0] if values else []
 
+    def read_cells(
+        self,
+        spreadsheet_id: str,
+        sheet_name: str,
+        cell_range: str | None = None,
+    ) -> dict:
+        range_name = (
+            self._qualified_range(sheet_name, cell_range)
+            if cell_range is not None
+            else self._quote_sheet_name(sheet_name)
+        )
+
+        with self._service() as service:
+            result = (
+                service.spreadsheets()
+                .values()
+                .get(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                )
+                .execute()
+            )
+
+        values = result.get("values", [])
+        if cell_range is not None:
+            normalized = self.normalize_cell_range(cell_range)
+            start = re.match(r"([A-Z]+)?(\d+)?", normalized)
+            return {
+                "sheet_name": sheet_name,
+                "range": result.get("range", range_name),
+                "start_column": start.group(1) if start else None,
+                "start_row": (
+                    int(start.group(2)) if start and start.group(2) else None
+                ),
+                "values": values,
+            }
+
+        compact_rows = []
+        populated = []
+        for row_number, row in enumerate(values, start=1):
+            cells = {}
+            for column_number, value in enumerate(row, start=1):
+                if value in {"", None}:
+                    continue
+                column = self._column_name(column_number)
+                cells[column] = value
+                populated.append((row_number, column_number))
+            if cells:
+                compact_rows.append({"row_number": row_number, "cells": cells})
+
+        populated_range = None
+        if populated:
+            first_row = min(row for row, _ in populated)
+            last_row = max(row for row, _ in populated)
+            first_column = min(column for _, column in populated)
+            last_column = max(column for _, column in populated)
+            populated_range = (
+                f"{sheet_name}!{self._column_name(first_column)}{first_row}:"
+                f"{self._column_name(last_column)}{last_row}"
+            )
+
+        return {
+            "sheet_name": sheet_name,
+            "populated_range": populated_range,
+            "rows": compact_rows,
+        }
+
     def append_rows(
         self,
         spreadsheet_id: str,
         sheet_name: str,
         values: list[list],
+        cell_range: str | None = None,
     ) -> dict:
         if not values:
             raise ValueError("values cannot be empty")
 
-        sheet = self._quote_sheet_name(sheet_name)
+        sheet = (
+            self._qualified_range(sheet_name, cell_range)
+            if cell_range is not None
+            else self._quote_sheet_name(sheet_name)
+        )
 
         with self._service() as service:
             result = (
@@ -228,6 +331,36 @@ class GoogleSheetsService:
             "updated_range": updates.get("updatedRange"),
             "updated_rows": updates.get("updatedRows", 0),
             "updated_cells": updates.get("updatedCells", 0),
+        }
+
+    def update_cells(
+        self,
+        spreadsheet_id: str,
+        sheet_name: str,
+        cell_range: str,
+        values: list[list],
+    ) -> dict:
+        if not values or any(not isinstance(row, list) for row in values):
+            raise ValueError("values must contain at least one row")
+
+        range_name = self._qualified_range(sheet_name, cell_range)
+        with self._service() as service:
+            result = (
+                service.spreadsheets()
+                .values()
+                .update(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                    valueInputOption="USER_ENTERED",
+                    body={"values": values},
+                )
+                .execute()
+            )
+
+        return {
+            "updated_range": result.get("updatedRange"),
+            "updated_rows": result.get("updatedRows", 0),
+            "updated_cells": result.get("updatedCells", 0),
         }
 
     def update_row(
