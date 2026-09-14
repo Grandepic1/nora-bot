@@ -1,10 +1,9 @@
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Literal
 
 from app.debug_logging import DebugLogger
 from app.services.google_sheets import GoogleSheetsService
-
 
 sheets: GoogleSheetsService | None = None
 SHEETS_LIMIT = asyncio.Semaphore(5)
@@ -65,6 +64,7 @@ async def _run_sheets(
 
         return result
 
+
 async def check_spreadsheet_access(
     spreadsheet_id: str,
     debug_log: DebugLogger | None = None,
@@ -85,6 +85,7 @@ async def check_spreadsheet_access(
             debug_log.event("sheets.access.checked", accessible=False)
         return False
 
+
 def build_sheet_tools(
     spreadsheet_id: str,
     debug_log: DebugLogger | None = None,
@@ -93,8 +94,7 @@ def build_sheet_tools(
 ) -> list:
     service = _get_sheets()
 
-    async def list_sheets(
-    ) -> list[dict]:
+    async def list_sheets() -> list[dict]:
         """
         List all sheets/tabs in a Google Spreadsheet.
         Returns:
@@ -107,135 +107,85 @@ def build_sheet_tools(
             debug_log=debug_log,
         )
 
-
-    async def read_sheet(
+    async def read_cells(
         sheet_name: str,
-    ) -> list[list]:
+        cell_range: str | None = None,
+    ) -> dict:
         """
-        Read all populated values from a sheet.
+        Inspect populated cells or read an exact A1 range from a sheet.
 
         Args:
             sheet_name:
                 The name of the sheet/tab to read.
+            cell_range:
+                Optional unqualified A1 range such as K20:M30. Omit it to
+                discover populated rows and their actual coordinates.
 
         Returns:
-            All populated rows from the sheet.
+            Coordinate-aware populated cells or values from the exact range.
         """
         return await _run_sheets(
-            service.read_sheet,
+            service.read_cells,
             spreadsheet_id,
             sheet_name,
+            cell_range,
             debug_log=debug_log,
         )
 
-
-    async def read_row(
-        sheet_name: str,
-        row_number: int,
-    ) -> list:
-        """
-        Read one row from a Google Sheet.
-
-        Args:
-            sheet_name:
-                The sheet/tab name.
-
-            row_number:
-                The visible Google Sheets row number.
-                Row numbering starts at 1.
-
-        Returns:
-            Values contained in the requested row.
-        """
-        return await _run_sheets(
-            service.read_row,
-            spreadsheet_id,
-            sheet_name,
-            row_number,
-            debug_log=debug_log,
-        )
-
-
-    async def append_rows(
-        sheet_name: str,
-        values: list[list],
-    ) -> dict:
-        """
-        Prepare rows to append and request user confirmation.
-        """
-        return await create_pending_action(
+    async def prepare_sheet_action(
+        operation: Literal[
             "append_rows",
-            {"sheet_name": sheet_name, "values": values},
-        )
-
-
-    async def update_row(
-        sheet_name: str,
-        row_number: int,
-        values: list,
-    ) -> dict:
-        """
-        Prepare replacement values and request user confirmation.
-        """
-        return await create_pending_action(
-            "update_row",
-            {
-                "sheet_name": sheet_name,
-                "row_number": row_number,
-                "values": values,
-            },
-        )
-
-
-    async def create_sheet(
-        title: str,
-    ) -> dict:
-        """
-        Prepare a new sheet/tab and request user confirmation.
-        """
-        return await create_pending_action(
+            "update_cells",
             "create_sheet",
-            {"title": title},
-        )
-
-
-    async def rename_sheet(
-        sheet_name: str,
-        new_name: str,
+            "rename_sheet",
+        ],
+        sheet_name: str | None = None,
+        cell_range: str | None = None,
+        values: list[list] | None = None,
+        title: str | None = None,
+        new_name: str | None = None,
     ) -> dict:
         """
-        Prepare a sheet/tab rename and request user confirmation.
+        Prepare one write operation for user confirmation.
+
+        For append_rows, provide sheet_name, a target table cell_range such as
+        K20:M, and values. For update_cells, provide sheet_name, the exact A1
+        cell_range, and two-dimensional values. For create_sheet, provide
+        title. For rename_sheet, provide sheet_name and new_name.
         """
-        return await create_pending_action(
-            "rename_sheet",
-            {"sheet_name": sheet_name, "new_name": new_name},
-        )
+        arguments = {
+            key: value
+            for key, value in {
+                "sheet_name": sheet_name,
+                "cell_range": cell_range,
+                "values": values,
+                "title": title,
+                "new_name": new_name,
+            }.items()
+            if value is not None
+        }
+        return await create_pending_action(operation, arguments)
 
-    async def confirm_sheet_action(confirmation_code: str) -> dict:
-        """Confirm and apply a pending sheet action after the user agrees."""
-        return await manage_pending_action("confirm", confirmation_code)
+    async def resolve_sheet_action(
+        choice: Literal["confirm", "preview", "cancel"],
+        confirmation_code: str,
+    ) -> dict:
+        """
+        Resolve a pending action after the user explicitly chooses an option.
 
-    async def preview_sheet_action(confirmation_code: str) -> dict:
-        """Generate a preview link after the user asks to see the preview."""
-        return await manage_pending_action("preview", confirmation_code)
-
-    async def cancel_sheet_action(confirmation_code: str) -> dict:
-        """Cancel a pending sheet action after the user declines it."""
-        return await manage_pending_action("cancel", confirmation_code)
-
+        Call this only in a later user turn, never in the turn where the action
+        was prepared. Use the private confirmation_code returned by the tool;
+        never show that code to the user.
+        """
+        return await manage_pending_action(choice, confirmation_code)
 
     read_tools = [
         list_sheets,
-        read_sheet,
-        read_row,
+        read_cells,
     ]
     if create_pending_action is None:
         return read_tools
-    tools = read_tools + [append_rows, update_row, create_sheet, rename_sheet]
+    tools = read_tools + [prepare_sheet_action]
     if manage_pending_action is not None:
-        tools += [
-            confirm_sheet_action,
-            preview_sheet_action,
-            cancel_sheet_action,
-        ]
+        tools.append(resolve_sheet_action)
     return tools

@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import math
+import re
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -457,6 +458,7 @@ class PendingSheetActionService:
         if operation not in {
             "append_rows",
             "update_row",
+            "update_cells",
             "create_sheet",
             "rename_sheet",
         }:
@@ -503,6 +505,70 @@ class PendingSheetActionService:
             )
             return {"sheet_name": sheet_name, "new_name": new_name}, preview
 
+        if operation == "append_rows":
+            values = self._validate_rows(arguments.get("values"))
+            cell_range = self._write_range(arguments.get("cell_range"))
+            width = max(len(row) for row in values)
+            header_range = self._header_range(cell_range, width)
+            header_data = await _run_sheets(
+                self.sheets.read_cells,
+                spreadsheet_id,
+                sheet_name,
+                header_range,
+                debug_log=self.debug_log,
+            )
+            header = header_data["values"][0] if header_data["values"] else []
+            preview.update(
+                summary=(
+                    f"Tambahkan {len(values)} baris ke {sheet_name} "
+                    f"pada tabel {cell_range}"
+                ),
+                columns=self._range_labels(cell_range, width, header),
+                rows=values,
+            )
+            return {
+                "sheet_name": sheet_name,
+                "cell_range": cell_range,
+                "values": values,
+            }, preview
+
+        if operation == "update_cells":
+            cell_range = self._write_range(
+                arguments.get("cell_range"),
+                require_bounded=True,
+            )
+            values = self._validate_rows(arguments.get("values"))
+            expected_rows, expected_columns = self._bounded_range_size(cell_range)
+            if len(values) != expected_rows or any(
+                len(row) != expected_columns for row in values
+            ):
+                raise ValueError(
+                    f"values must match the {expected_rows}x{expected_columns} "
+                    f"target range {cell_range}"
+                )
+            before_data = await _run_sheets(
+                self.sheets.read_cells,
+                spreadsheet_id,
+                sheet_name,
+                cell_range,
+                debug_log=self.debug_log,
+            )
+            start_row = before_data.get("start_row") or 1
+            width = max(len(row) for row in values)
+            preview.update(
+                summary=f"Perbarui range {cell_range} di {sheet_name}",
+                columns=self._range_labels(cell_range, width),
+                rows=values,
+                before=before_data["values"],
+                row_number=start_row,
+                cell_range=cell_range,
+            )
+            return {
+                "sheet_name": sheet_name,
+                "cell_range": cell_range,
+                "values": values,
+            }, preview
+
         header = await _run_sheets(
             self.sheets.read_row,
             spreadsheet_id,
@@ -510,17 +576,6 @@ class PendingSheetActionService:
             1,
             debug_log=self.debug_log,
         )
-
-        if operation == "append_rows":
-            values = self._validate_rows(arguments.get("values"))
-            width = max(len(row) for row in values)
-            preview.update(
-                summary=f"Tambahkan {len(values)} baris ke {sheet_name}",
-                columns=self._column_labels(header, width),
-                rows=values,
-            )
-            return {"sheet_name": sheet_name, "values": values}, preview
-
         row_number = arguments.get("row_number")
         if not isinstance(row_number, int) or isinstance(row_number, bool):
             raise ValueError("row_number must be an integer")
@@ -556,10 +611,10 @@ class PendingSheetActionService:
         if edits is None:
             return arguments
 
-        if action.operation in {"append_rows", "update_row"}:
+        if action.operation in {"append_rows", "update_row", "update_cells"}:
             original_rows = (
                 arguments["values"]
-                if action.operation == "append_rows"
+                if action.operation in {"append_rows", "update_cells"}
                 else [arguments["values"]]
             )
             expected = {
@@ -581,7 +636,9 @@ class PendingSheetActionService:
                         raise InvalidActionEdit(str(error)) from error
                     next_row.append(original if value == str(original) else value)
                 rows.append(next_row)
-            arguments["values"] = rows if action.operation == "append_rows" else rows[0]
+            arguments["values"] = (
+                rows if action.operation in {"append_rows", "update_cells"} else rows[0]
+            )
             return arguments
 
         field = "title" if action.operation == "create_sheet" else "new_name"
@@ -640,16 +697,37 @@ class PendingSheetActionService:
             if current != action.preview["before"]:
                 raise ActionConflict("Baris target berubah sejak preview dibuat.")
 
+        if action.operation == "update_cells":
+            current = await _run_sheets(
+                self.sheets.read_cells,
+                action.spreadsheet_id,
+                arguments["sheet_name"],
+                arguments["cell_range"],
+                debug_log=self.debug_log,
+            )
+            if current["values"] != action.preview["before"]:
+                raise ActionConflict("Range target berubah sejak preview dibuat.")
+
     async def _execute(self, action: PendingSheetAction) -> dict[str, Any]:
         arguments = action.arguments
         method = getattr(self.sheets, action.operation)
 
         if action.operation == "append_rows":
-            args = (arguments["sheet_name"], arguments["values"])
+            args = (
+                arguments["sheet_name"],
+                arguments["values"],
+                arguments.get("cell_range"),
+            )
         elif action.operation == "update_row":
             args = (
                 arguments["sheet_name"],
                 arguments["row_number"],
+                arguments["values"],
+            )
+        elif action.operation == "update_cells":
+            args = (
+                arguments["sheet_name"],
+                arguments["cell_range"],
                 arguments["values"],
             )
         elif action.operation == "create_sheet":
@@ -752,6 +830,87 @@ class PendingSheetActionService:
             else:
                 labels.append(cls._column_name(index + 1))
         return labels
+
+    @classmethod
+    def _range_labels(
+        cls,
+        cell_range: str,
+        width: int,
+        header: list | None = None,
+    ) -> list[str]:
+        match = re.match(r"([A-Z]+)", cell_range)
+        start = cls._column_number(match.group(1)) if match else 1
+        labels = []
+        for index in range(width):
+            if header and index < len(header) and str(header[index]).strip():
+                labels.append(str(header[index]))
+            else:
+                labels.append(cls._column_name(start + index))
+        return labels
+
+    @classmethod
+    def _header_range(cls, cell_range: str, width: int) -> str:
+        match = re.fullmatch(
+            r"([A-Z]+)(\d+)(?::([A-Z]+)(?:\d+)?)?",
+            cell_range,
+        )
+        if match is None:
+            raise ValueError("Append range must start with a cell, such as K20:M")
+        start_column = match.group(1)
+        row = match.group(2)
+        available_columns = (
+            cls._column_number(match.group(3) or start_column)
+            - cls._column_number(start_column)
+            + 1
+        )
+        if available_columns < width:
+            raise ValueError(
+                f"values exceed the {available_columns}-column append range "
+                f"{cell_range}"
+            )
+        end_column = cls._column_name(cls._column_number(start_column) + width - 1)
+        return f"{start_column}{row}:{end_column}{row}"
+
+    @staticmethod
+    def _write_range(value: Any, require_bounded: bool = False) -> str:
+        if not isinstance(value, str):
+            raise ValueError("cell_range is required")
+        normalized = GoogleSheetsService.normalize_cell_range(value)
+        if re.match(r"[A-Z]+\d+", normalized) is None:
+            raise ValueError("cell_range must start with a cell, such as K20:M30")
+        if (
+            require_bounded
+            and re.fullmatch(
+                r"[A-Z]+\d+(?::[A-Z]+\d+)?",
+                normalized,
+            )
+            is None
+        ):
+            raise ValueError("update_cells requires an exact A1 range, such as K20:M30")
+        return normalized
+
+    @staticmethod
+    def _column_number(column: str) -> int:
+        number = 0
+        for character in column:
+            number = number * 26 + ord(character) - 64
+        return number
+
+    @classmethod
+    def _bounded_range_size(cls, cell_range: str) -> tuple[int, int]:
+        match = re.fullmatch(
+            r"([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?",
+            cell_range,
+        )
+        if match is None:
+            raise ValueError("cell_range must be a bounded A1 range")
+        start_column = cls._column_number(match.group(1))
+        start_row = int(match.group(2))
+        end_column = cls._column_number(match.group(3) or match.group(1))
+        end_row = int(match.group(4) or match.group(2))
+        if end_column < start_column or end_row < start_row:
+            raise ValueError("cell_range end must not precede its start")
+        return end_row - start_row + 1, end_column - start_column + 1
 
     @staticmethod
     def _column_name(number: int) -> str:

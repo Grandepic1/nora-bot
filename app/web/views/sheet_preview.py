@@ -99,10 +99,10 @@ def _preview_context(
         return context
 
     arguments = action.arguments
-    if action.operation in {"append_rows", "update_row"}:
+    if action.operation in {"append_rows", "update_row", "update_cells"}:
         values = (
             arguments["values"]
-            if action.operation == "append_rows"
+            if action.operation in {"append_rows", "update_cells"}
             else [arguments["values"]]
         )
         first_number = int(preview.get("row_number", 1))
