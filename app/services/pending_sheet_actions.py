@@ -130,8 +130,9 @@ class PendingSheetActionService:
             "expires_at": expires_at.isoformat(),
             "options": ["confirm", "preview", "cancel"],
             "instruction": (
-                "Ask the user to reply with their choice. Do not choose for "
-                "them or show a preview link yet."
+                "Ask the user to confirm, preview, or cancel. If they already "
+                "requested a preview, generate its link now. Never confirm "
+                "the action in the turn where it was prepared."
             ),
         }
 
@@ -148,9 +149,6 @@ class PendingSheetActionService:
         async with self.session_factory() as db:
             async with db.begin():
                 action = await self._find_by_code(db, code, user_id, lock=True)
-                same_turn = self._reject_same_turn(action, message_id)
-                if same_turn is not None:
-                    return same_turn
                 invalid = await self._validate_pending(db, action, now)
                 if invalid is not None:
                     return invalid
@@ -297,12 +295,7 @@ class PendingSheetActionService:
                 if invalid is not None:
                     return invalid
 
-                try:
-                    final_arguments = self._apply_edits(action, edits)
-                except InvalidActionEdit:
-                    raise
-
-                action.arguments = final_arguments
+                action.arguments = self._apply_edits(action, edits)
                 action.status = "processing"
 
         self.debug_log.event(
@@ -461,6 +454,8 @@ class PendingSheetActionService:
             "update_cells",
             "create_sheet",
             "rename_sheet",
+            "delete_row",
+            "delete_sheet",
         }:
             raise ValueError("Unsupported sheet operation")
 
@@ -493,6 +488,15 @@ class PendingSheetActionService:
         if sheet is None:
             raise ValueError(f'Sheet "{sheet_name}" does not exist')
         preview.update(sheet_name=sheet_name, sheet_id=sheet["sheet_id"])
+
+        if operation == "delete_sheet":
+            if len(info["sheets"]) <= 1:
+                raise ValueError("The only remaining sheet cannot be deleted")
+            preview.update(
+                summary=f'Hapus sheet "{sheet_name}" secara permanen',
+                destructive=True,
+            )
+            return {"sheet_name": sheet_name}, preview
 
         if operation == "rename_sheet":
             new_name = self._validate_title(
@@ -569,6 +573,39 @@ class PendingSheetActionService:
                 "values": values,
             }, preview
 
+        if operation == "delete_row":
+            row_number = arguments.get("row_number")
+            if not isinstance(row_number, int) or isinstance(row_number, bool):
+                raise ValueError("row_number must be an integer")
+            if row_number < 1:
+                raise ValueError("row_number must be >= 1")
+            header = await _run_sheets(
+                self.sheets.read_row,
+                spreadsheet_id,
+                sheet_name,
+                1,
+                debug_log=self.debug_log,
+            )
+            before = await _run_sheets(
+                self.sheets.read_row,
+                spreadsheet_id,
+                sheet_name,
+                row_number,
+                debug_log=self.debug_log,
+            )
+            preview.update(
+                summary=f"Hapus baris {row_number} dari {sheet_name}",
+                columns=self._column_labels(header, len(before)),
+                rows=[before],
+                before=before,
+                row_number=row_number,
+                destructive=True,
+            )
+            return {
+                "sheet_name": sheet_name,
+                "row_number": row_number,
+            }, preview
+
         header = await _run_sheets(
             self.sheets.read_row,
             spreadsheet_id,
@@ -609,6 +646,11 @@ class PendingSheetActionService:
     ) -> dict[str, Any]:
         arguments = dict(action.arguments)
         if edits is None:
+            return arguments
+
+        if action.operation in {"delete_row", "delete_sheet"}:
+            if edits:
+                raise InvalidActionEdit("Aksi hapus tidak menerima perubahan data.")
             return arguments
 
         if action.operation in {"append_rows", "update_row", "update_cells"}:
@@ -677,6 +719,11 @@ class PendingSheetActionService:
         if sheet is None or sheet["title"] != action.preview["sheet_name"]:
             raise ActionConflict("Sheet target sudah berubah.")
 
+        if action.operation == "delete_sheet":
+            if len(info["sheets"]) <= 1:
+                raise ActionConflict("Sheet terakhir tidak dapat dihapus.")
+            return
+
         if action.operation == "rename_sheet":
             if any(
                 item["title"] == arguments["new_name"]
@@ -686,7 +733,7 @@ class PendingSheetActionService:
                 raise ActionConflict("Nama sheet baru sudah digunakan.")
             return
 
-        if action.operation == "update_row":
+        if action.operation in {"update_row", "delete_row"}:
             current = await _run_sheets(
                 self.sheets.read_row,
                 action.spreadsheet_id,
@@ -695,7 +742,9 @@ class PendingSheetActionService:
                 debug_log=self.debug_log,
             )
             if current != action.preview["before"]:
-                raise ActionConflict("Baris target berubah sejak preview dibuat.")
+                raise ActionConflict(
+                    "Baris target berubah sejak preview dibuat."
+                )
 
         if action.operation == "update_cells":
             current = await _run_sheets(
@@ -732,8 +781,16 @@ class PendingSheetActionService:
             )
         elif action.operation == "create_sheet":
             args = (arguments["title"],)
-        else:
+        elif action.operation == "rename_sheet":
             args = (arguments["sheet_name"], arguments["new_name"])
+        elif action.operation == "delete_row":
+            args = (
+                arguments["sheet_name"],
+                arguments["row_number"],
+                action.preview["sheet_id"],
+            )
+        else:
+            args = (arguments["sheet_name"], action.preview["sheet_id"])
 
         return await _run_sheets(
             method,

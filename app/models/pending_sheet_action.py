@@ -22,7 +22,7 @@ class PendingSheetAction(Base):
     __table_args__ = (
         CheckConstraint(
             "operation IN ('append_rows', 'update_row', 'update_cells', "
-            "'create_sheet', 'rename_sheet')",
+            "'create_sheet', 'rename_sheet', 'delete_row', 'delete_sheet')",
             name="pending_sheet_actions_operation",
         ),
         CheckConstraint(

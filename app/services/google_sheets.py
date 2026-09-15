@@ -426,6 +426,7 @@ class GoogleSheetsService:
         spreadsheet_id: str,
         sheet_name: str,
         row_number: int,
+        sheet_id: int | None = None,
     ) -> dict:
         if row_number < 1:
             raise ValueError("row_number must be >= 1")
@@ -433,7 +434,11 @@ class GoogleSheetsService:
         start_index = row_number - 1
 
         with self._service() as service:
-            sheet_id = self._get_sheet_id(service, spreadsheet_id, sheet_name)
+            target_sheet_id = (
+                sheet_id
+                if sheet_id is not None
+                else self._get_sheet_id(service, spreadsheet_id, sheet_name)
+            )
             (
                 service.spreadsheets()
                 .batchUpdate(
@@ -443,7 +448,7 @@ class GoogleSheetsService:
                             {
                                 "deleteDimension": {
                                     "range": {
-                                        "sheetId": sheet_id,
+                                        "sheetId": target_sheet_id,
                                         "dimension": "ROWS",
                                         "startIndex": start_index,
                                         "endIndex": start_index + 1,
@@ -546,16 +551,25 @@ class GoogleSheetsService:
             "cleared_range": result.get("clearedRange"),
         }
 
-    def delete_sheet(self, spreadsheet_id: str, sheet_name: str) -> dict:
+    def delete_sheet(
+        self,
+        spreadsheet_id: str,
+        sheet_name: str,
+        sheet_id: int | None = None,
+    ) -> dict:
         with self._service() as service:
-            sheet_id = self._get_sheet_id(service, spreadsheet_id, sheet_name)
+            target_sheet_id = (
+                sheet_id
+                if sheet_id is not None
+                else self._get_sheet_id(service, spreadsheet_id, sheet_name)
+            )
             (
                 service.spreadsheets()
                 .batchUpdate(
                     spreadsheetId=spreadsheet_id,
                     body={
                         "requests": [
-                            {"deleteSheet": {"sheetId": sheet_id}}
+                            {"deleteSheet": {"sheetId": target_sheet_id}}
                         ]
                     },
                 )

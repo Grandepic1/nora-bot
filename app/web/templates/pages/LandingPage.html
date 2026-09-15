@@ -1,0 +1,1711 @@
+{% extends "base.html" %}
+
+{% block title %}NORA — Data dari WhatsApp, Langsung Masuk Spreadsheet{% endblock %}
+{% block description %}NORA — AI assistant berbasis WhatsApp yang memasukkan data dari percakapan WhatsApp ke Google Spreadsheet secara otomatis.{% endblock %}
+{% block head %}
+<link rel="icon" type="image/png" href="/static/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+{% endblock %}
+{% block body_class %}overflow-x-hidden bg-paper font-sans text-ink antialiased{% endblock %}
+
+{% block content %}
+    <!-- ===== NAVBAR ===== -->
+    <header class="sticky top-0 z-50 border-b border-line/70 bg-paper/85 backdrop-blur">
+      <div class="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-3.5">
+        <a href="#hero" class="flex items-center gap-2.5">
+          <img class="size-8" src="/static/icon.png" alt="NORA" />
+          <span class="text-lg font-bold tracking-tight text-ink">NORA</span>
+        </a>
+        <nav class="hidden items-center gap-7 text-sm font-medium text-secondary md:flex">
+          <a class="transition-colors hover:text-ink" href="#cara-kerja">Cara Kerja</a>
+          <a class="transition-colors hover:text-ink" href="#contoh">Contoh</a>
+          <a class="transition-colors hover:text-ink" href="#command">Command</a>
+          <a class="transition-colors hover:text-ink" href="#fitur">Fitur</a>
+        </nav>
+        <a
+          class="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          href="https://wa.me/{{ phone_number }}?text=%2Fhelp"
+          target="_blank"
+          rel="noopener"
+        >
+          Mulai Gunakan NORA
+        </a>
+      </div>
+    </header>
+
+    <main>
+      <!-- ===== HERO ===== -->
+      <section id="hero" class="px-6 pb-16 pt-14 sm:pb-20 sm:pt-20">
+        <div class="mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-2 lg:gap-14">
+          <div class="animate-fade-up">
+            <span
+              class="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-xs font-medium text-secondary shadow-sm"
+            >
+              <span class="relative flex size-2">
+                <span class="absolute inline-flex size-full animate-ping-slow rounded-full bg-success"></span>
+                <span class="relative inline-flex size-2 rounded-full bg-success"></span>
+              </span>
+              AI Assistant · WhatsApp → Google Spreadsheet
+            </span>
+
+            <h1
+              class="mt-6 text-balance text-4xl font-bold leading-[1.1] tracking-tight text-ink sm:text-5xl lg:text-6xl"
+            >
+              Data dari WhatsApp,<br />
+              <span class="text-accent">langsung masuk</span> Spreadsheet.
+            </h1>
+
+            <p class="mt-6 max-w-xl text-lg leading-relaxed text-secondary">
+              NORA membantu mengubah data dari pesan WhatsApp menjadi data terstruktur di
+              Google Spreadsheet secara otomatis.
+            </p>
+
+            <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <a
+                class="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-6 py-3.5 text-base font-semibold text-white shadow-sm transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                href="https://wa.me/{{ phone_number }}?text=%2Fhelp"
+                target="_blank"
+                rel="noopener"
+              >
+                Mulai Gunakan NORA
+              </a>
+              <a
+                class="inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-white px-6 py-3.5 text-base font-semibold text-ink shadow-sm transition hover:border-ink/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                href="#cara-kerja"
+              >
+                Lihat Cara Kerja
+              </a>
+            </div>
+
+            <p class="mt-6 text-sm text-secondary">
+              Kamu tetap ngobrol di WhatsApp seperti biasa. Tanpa dashboard baru.
+            </p>
+          </div>
+
+          <!-- Hero visual: WhatsApp → NORA → Spreadsheet -->
+          <div class="animate-fade-up" style="animation-delay: 0.12s">
+            <figure class="rounded-3xl border border-line bg-white p-5 shadow-sm sm:p-6">
+              <div class="flex flex-col items-center gap-3 sm:gap-4 md:flex-row md:gap-2">
+                <!-- WhatsApp -->
+                <div
+                  class="w-full overflow-hidden rounded-2xl border border-line bg-chat/50 md:flex-1"
+                >
+                  <div class="flex items-center gap-2 border-b border-line bg-white px-3 py-2">
+                    <svg
+                      class="size-4 shrink-0 text-wa-night"
+                      viewBox="0 0 32 32"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M16.004 3C9.384 3 4 8.383 4 15.001c0 2.119.556 4.189 1.614 6.015L4 29l8.157-1.57a12.06 12.06 0 0 0 3.847.64h.003c6.62 0 12.003-5.383 12.003-12.001S22.624 3 16.004 3zm0 21.912h-.002a9.96 9.96 0 0 1-4.888-1.27l-.35-.208-4.838.93.936-4.717-.227-.364a9.92 9.92 0 0 1-1.536-5.283c0-5.483 4.462-9.912 9.916-9.912 2.644 0 5.128 1.028 6.994 2.897 1.866 1.869 2.894 4.353 2.894 6.998 0 5.484-4.462 9.914-9.916 9.914zm5.438-7.419c-.298-.149-1.76-.868-2.036-.968-.274-.098-.473-.149-.672.15-.199.298-.773.968-.947 1.166-.174.2-.348.224-.647.075-.298-.15-1.258-.464-2.396-1.478-.886-.79-1.482-1.765-1.656-2.062-.173-.298-.019-.46.13-.608.134-.133.298-.347.448-.52.149-.174.199-.299.298-.498.099-.2.05-.374-.025-.523-.074-.15-.672-1.618-.92-2.216-.241-.58-.487-.501-.671-.51l-.571-.01c-.199 0-.52.074-.792.373-.273.298-1.043 1.02-1.043 2.489s1.067 2.888 1.217 3.088c.149.2 2.102 3.208 5.09 4.497.71.307 1.266.49 1.7.626.715.225 1.365.194 1.879.118.574-.086 1.76-.72 2.008-1.414.247-.694.247-1.289.173-1.413-.074-.124-.272-.199-.571-.348z"
+                      />
+                    </svg>
+                    <div>
+                      <p class="text-xs font-semibold leading-none text-ink">WhatsApp</p>
+                      <p class="mt-0.5 text-[10px] text-secondary">pesan masuk · 10:24</p>
+                    </div>
+                  </div>
+                  <div class="flex justify-end px-3 py-3">
+                    <div
+                      class="w-fit max-w-[92%] rounded-xl rounded-tr-sm bg-wa-soft px-3 py-2 font-mono text-xs text-ink shadow-sm"
+                    >
+                      sumanto, 15k, ayam geprek
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Arrow -->
+                <span
+                  class="flex size-8 shrink-0 rotate-90 items-center justify-center rounded-full border border-accent/20 bg-accent-soft text-accent animate-pulse-soft md:rotate-0"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="size-4"
+                    aria-hidden="true"
+                  >
+                    <path d="M5 12h14" />
+                    <path d="m13 6 6 6-6 6" />
+                  </svg>
+                </span>
+
+                <!-- NORA -->
+                <div class="flex w-full flex-col items-center gap-1.5 md:w-auto">
+                  <div class="relative">
+                    <img
+                      class="size-14 rounded-2xl border border-line bg-white p-1.5 shadow-sm"
+                      src="/static/icon.png"
+                      alt="NORA"
+                    />
+                    <span class="absolute -right-1 -top-1 flex size-3">
+                      <span class="absolute inline-flex size-full animate-ping-slow rounded-full bg-success"></span>
+                      <span class="relative inline-flex size-3 rounded-full bg-success"></span>
+                    </span>
+                  </div>
+                  <p class="text-xs font-semibold text-ink">NORA AI</p>
+                </div>
+
+                <!-- Arrow -->
+                <span
+                  class="flex size-8 shrink-0 rotate-90 items-center justify-center rounded-full border border-accent/20 bg-accent-soft text-accent animate-pulse-soft md:rotate-0"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="size-4"
+                    aria-hidden="true"
+                  >
+                    <path d="M5 12h14" />
+                    <path d="m13 6 6 6-6 6" />
+                  </svg>
+                </span>
+
+                <!-- Google Spreadsheet -->
+                <div class="w-full overflow-hidden rounded-2xl border border-line bg-white md:flex-1">
+                  <div class="flex items-center gap-2 border-b border-line bg-sheets-soft/60 px-3 py-2">
+                    <svg
+                      class="size-4 shrink-0 text-sheets"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.6"
+                      aria-hidden="true"
+                    >
+                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                      <path d="M3 9.5h18M9 9.5v10.5M15 9.5v10.5" />
+                    </svg>
+                    <div>
+                      <p class="text-xs font-semibold leading-none text-ink">
+                        Google Spreadsheet
+                      </p>
+                      <p class="mt-0.5 text-[10px] text-secondary">Data Mahasiswa</p>
+                    </div>
+                  </div>
+                  <div class="overflow-x-auto px-2 py-2.5">
+                    <table class="w-full text-left text-[11px]">
+                      <thead>
+                        <tr class="text-sheets">
+                          <th class="px-1.5 py-1 font-semibold">No</th>
+                          <th class="px-1.5 py-1 font-semibold">Nama</th>
+                          <th class="px-1.5 py-1 text-right font-semibold">Nominal</th>
+                          <th class="px-1.5 py-1 font-semibold">Makanan</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr class="bg-success-soft/70 font-medium">
+                          <td class="px-1.5 py-1">3</td>
+                          <td class="px-1.5 py-1">Sumanto</td>
+                          <td class="px-1.5 py-1 text-right">15.000</td>
+                          <td class="px-1.5 py-1">Ayam Geprek</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== CORE VALUE ===== -->
+      <section class="px-6 pb-20 sm:pb-24">
+        <div class="mx-auto w-full max-w-6xl">
+          <div class="rounded-3xl border border-line bg-white px-6 py-9 text-center shadow-sm sm:px-12">
+            <p class="mx-auto max-w-2xl text-balance text-lg font-medium leading-relaxed text-ink sm:text-xl">
+              NORA bukan aplikasi chat baru, dan bukan juga spreadsheet baru.
+              <span class="text-accent">NORA adalah jembatan</span> antara WhatsApp dan
+              spreadsheet yang sudah kamu pakai.
+            </p>
+            <div class="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold">
+              <span class="rounded-full bg-wa-soft px-3 py-1.5 text-wa-night">WhatsApp</span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="size-3.5 text-accent"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14" />
+                <path d="m13 6 6 6-6 6" />
+              </svg>
+              <span class="rounded-full bg-accent-soft px-3 py-1.5 text-accent">NORA</span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="size-3.5 text-accent"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14" />
+                <path d="m13 6 6 6-6 6" />
+              </svg>
+              <span class="rounded-full bg-sheets-soft px-3 py-1.5 text-sheets">Google Spreadsheet</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== HOW TO USE ===== -->
+      <section id="cara-kerja" class="bg-surface px-6 py-20 sm:py-24">
+        <div class="mx-auto w-full max-w-6xl">
+          <div class="mx-auto max-w-2xl text-center">
+            <p class="text-sm font-bold uppercase tracking-widest text-accent">Cara Menggunakan NORA</p>
+            <h2 class="mt-3 text-balance text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+              Mulai dari WhatsApp,<br />
+              selesai di Spreadsheet.
+            </h2>
+            <p class="mt-4 text-base leading-relaxed text-secondary sm:text-lg">
+              Ikuti beberapa langkah sederhana untuk menghubungkan spreadsheet dan mulai
+              mengirim data melalui WhatsApp.
+            </p>
+          </div>
+
+          <div class="mt-12 gap-12 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-start lg:gap-14">
+            <p class="mb-5 text-sm text-secondary lg:hidden">
+              Ketuk setiap langkah untuk melihat simulasi lengkapnya.
+            </p>
+
+            <!-- LEFT: stepper -->
+            <div id="howto-steps">
+              <ol>
+                <!-- STEP 01 -->
+                <li class="relative" data-step="0">
+                  <div class="flex gap-4">
+                    <div class="flex w-9 shrink-0 flex-col items-center">
+                      <button
+                        type="button"
+                        data-activate="0"
+                        class="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        aria-label="Lihat langkah: Pilih Session"
+                      >
+                        <span
+                          class="step-node flex size-9 items-center justify-center rounded-full border text-sm font-bold transition-colors"
+                        >
+                          <span class="step-num">01</span>
+                          <svg
+                            class="step-check hidden size-4"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M3 8.5 6.5 12 13 4.5" />
+                          </svg>
+                        </span>
+                      </button>
+                      <span class="step-line mt-2 w-px flex-1 rounded bg-line" aria-hidden="true"></span>
+                    </div>
+                    <div class="min-w-0 flex-1 pb-8">
+                      <button
+                        type="button"
+                        data-activate="0"
+                        class="group flex w-full items-center justify-between gap-3 pb-1 pt-0.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      >
+                        <span class="step-title text-base font-semibold">Pilih Session</span>
+                        <svg
+                          class="step-chevron size-4 shrink-0 text-secondary transition-transform duration-300"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </button>
+                      <div class="step-content mt-3" hidden>
+                        <div class="step-card rounded-2xl border border-line bg-white p-5 shadow-sm">
+                          <p class="text-sm leading-relaxed text-secondary">
+                            Mulai dengan memilih session yang ingin kamu gunakan.
+                          </p>
+                          <div class="mt-3.5 rounded-lg border border-line bg-surface/60 px-3 py-2.5 font-mono text-xs leading-6">
+                            <div><span class="text-accent">›</span> /list-session</div>
+                            <div><span class="text-accent">›</span> /start data mahasiswa</div>
+                          </div>
+                          <p class="step-note mt-3 text-xs leading-relaxed text-secondary">
+                            Session menentukan konteks kerja yang sedang digunakan NORA.
+                          </p>
+                          <div class="step-next mt-4 flex justify-end">
+                            <button
+                              type="button"
+                              data-next="1"
+                              class="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3.5 py-2 text-xs font-semibold text-ink shadow-sm transition hover:border-ink/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                            >
+                              Berikutnya <span aria-hidden="true">→</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+
+                <!-- STEP 02 -->
+                <li class="relative" data-step="1">
+                  <div class="flex gap-4">
+                    <div class="flex w-9 shrink-0 flex-col items-center">
+                      <button
+                        type="button"
+                        data-activate="1"
+                        class="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        aria-label="Lihat langkah: Hubungkan Spreadsheet"
+                      >
+                        <span
+                          class="step-node flex size-9 items-center justify-center rounded-full border text-sm font-bold transition-colors"
+                        >
+                          <span class="step-num">02</span>
+                          <svg
+                            class="step-check hidden size-4"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M3 8.5 6.5 12 13 4.5" />
+                          </svg>
+                        </span>
+                      </button>
+                      <span class="step-line mt-2 w-px flex-1 rounded bg-line" aria-hidden="true"></span>
+                    </div>
+                    <div class="min-w-0 flex-1 pb-8">
+                      <button
+                        type="button"
+                        data-activate="1"
+                        class="group flex w-full items-center justify-between gap-3 pb-1 pt-0.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      >
+                        <span class="step-title text-base font-semibold">Hubungkan Spreadsheet</span>
+                        <svg
+                          class="step-chevron size-4 shrink-0 text-secondary transition-transform duration-300"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </button>
+                      <div class="step-content mt-3" hidden>
+                        <div class="step-card rounded-2xl border border-line bg-white p-5 shadow-sm">
+                          <p class="text-sm leading-relaxed text-secondary">
+                            Tentukan Google Spreadsheet yang akan dipakai untuk menyimpan data.
+                          </p>
+                          <div class="mt-3.5 rounded-lg border border-line bg-surface/60 px-3 py-2.5 font-mono text-xs leading-6">
+                            <div><span class="text-accent">›</span> /spreadsheet</div>
+                            <div class="truncate pl-4 text-secondary">https://docs.google.com/spreadsheets/…</div>
+                          </div>
+                          <p class="step-note mt-3 text-xs leading-relaxed text-secondary">
+                            Pastikan spreadsheet sudah tersedia sebelum menghubungkannya.
+                          </p>
+                          <div class="step-next mt-4 flex justify-end">
+                            <button
+                              type="button"
+                              data-next="2"
+                              class="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3.5 py-2 text-xs font-semibold text-ink shadow-sm transition hover:border-ink/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                            >
+                              Berikutnya <span aria-hidden="true">→</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+
+                <!-- STEP 03 -->
+                <li class="relative" data-step="2">
+                  <div class="flex gap-4">
+                    <div class="flex w-9 shrink-0 flex-col items-center">
+                      <button
+                        type="button"
+                        data-activate="2"
+                        class="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        aria-label="Lihat langkah: Berikan Akses ke NORA"
+                      >
+                        <span
+                          class="step-node flex size-9 items-center justify-center rounded-full border text-sm font-bold transition-colors"
+                        >
+                          <span class="step-num">03</span>
+                          <svg
+                            class="step-check hidden size-4"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M3 8.5 6.5 12 13 4.5" />
+                          </svg>
+                        </span>
+                      </button>
+                      <span class="step-line mt-2 w-px flex-1 rounded bg-line" aria-hidden="true"></span>
+                    </div>
+                    <div class="min-w-0 flex-1 pb-8">
+                      <button
+                        type="button"
+                        data-activate="2"
+                        class="group flex w-full items-center justify-between gap-3 pb-1 pt-0.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      >
+                        <span class="step-title text-base font-semibold">Berikan Akses ke NORA</span>
+                        <svg
+                          class="step-chevron size-4 shrink-0 text-secondary transition-transform duration-300"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </button>
+                      <div class="step-content mt-3" hidden>
+                        <div class="step-card rounded-2xl border border-line bg-white p-5 shadow-sm">
+                          <p class="text-sm leading-relaxed text-secondary">
+                            Tambahkan akun berikut sebagai <span class="font-medium text-ink">Editor</span>
+                            pada spreadsheet yang digunakan.
+                          </p>
+                          <div class="mt-3.5 flex items-center gap-2 rounded-lg border border-line bg-surface/60 px-3 py-2.5">
+                            <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-ink">
+                              nora-sheets@gen-lang-client-0347904718.iam.gserviceaccount.com
+                            </span>
+                            <button
+                              type="button"
+                              data-copy="nora-sheets@gen-lang-client-0347904718.iam.gserviceaccount.com"
+                              class="shrink-0 rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-ink shadow-sm transition hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            >
+                              Salin
+                            </button>
+                          </div>
+                          <p class="step-note mt-3 text-xs leading-relaxed text-secondary">
+                            NORA menyebut akun ini lewat chat setiap kali spreadsheet dihubungkan.
+                            Cukup tambahkan sekali per spreadsheet.
+                          </p>
+                          <div class="step-next mt-4 flex justify-end">
+                            <button
+                              type="button"
+                              data-next="3"
+                              class="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3.5 py-2 text-xs font-semibold text-ink shadow-sm transition hover:border-ink/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                            >
+                              Berikutnya <span aria-hidden="true">→</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+
+                <!-- STEP 04 -->
+                <li class="relative" data-step="3">
+                  <div class="flex gap-4">
+                    <div class="flex w-9 shrink-0 flex-col items-center">
+                      <button
+                        type="button"
+                        data-activate="3"
+                        class="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        aria-label="Lihat langkah: Kirim Data lewat WhatsApp"
+                      >
+                        <span
+                          class="step-node flex size-9 items-center justify-center rounded-full border text-sm font-bold transition-colors"
+                        >
+                          <span class="step-num">04</span>
+                          <svg
+                            class="step-check hidden size-4"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M3 8.5 6.5 12 13 4.5" />
+                          </svg>
+                        </span>
+                      </button>
+                      <span class="step-line mt-2 w-px flex-1 rounded bg-line" aria-hidden="true"></span>
+                    </div>
+                    <div class="min-w-0 flex-1 pb-8">
+                      <button
+                        type="button"
+                        data-activate="3"
+                        class="group flex w-full items-center justify-between gap-3 pb-1 pt-0.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      >
+                        <span class="step-title text-base font-semibold">Kirim Data lewat WhatsApp</span>
+                        <svg
+                          class="step-chevron size-4 shrink-0 text-secondary transition-transform duration-300"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </button>
+                      <div class="step-content mt-3" hidden>
+                        <div class="step-card rounded-2xl border border-line bg-white p-5 shadow-sm">
+                          <p class="text-sm leading-relaxed text-secondary">
+                            Setelah terhubung, cukup kirim data dengan bahasa yang natural.
+                          </p>
+                          <div class="mt-3.5 flex flex-col gap-1.5">
+                            <span class="text-[10px] font-semibold uppercase tracking-wide text-secondary">
+                              Contoh pesan
+                            </span>
+                            <div
+                              class="ml-auto w-fit max-w-full rounded-xl rounded-tr-sm bg-wa-soft px-3 py-2 font-mono text-xs shadow-sm"
+                            >
+                              sumanto, 15k, ayam geprek
+                            </div>
+                          </div>
+                          <p class="step-note mt-3 text-xs leading-relaxed text-secondary">
+                            NORA memetakan isi pesan ke kolom spreadsheet. Tidak perlu membuka
+                            spreadsheet setiap kali memasukkan data.
+                          </p>
+                          <div class="step-next mt-4 flex justify-end">
+                            <button
+                              type="button"
+                              data-next="4"
+                              class="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3.5 py-2 text-xs font-semibold text-ink shadow-sm transition hover:border-ink/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                            >
+                              Berikutnya <span aria-hidden="true">→</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+
+                <!-- STEP 05 -->
+                <li class="relative" data-step="4">
+                  <div class="flex gap-4">
+                    <div class="flex w-9 shrink-0 flex-col items-center">
+                      <button
+                        type="button"
+                        data-activate="4"
+                        class="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        aria-label="Lihat langkah: Data Berhasil Dicatat"
+                      >
+                        <span
+                          class="step-node flex size-9 items-center justify-center rounded-full border text-sm font-bold transition-colors"
+                        >
+                          <span class="step-num">05</span>
+                          <svg
+                            class="step-check hidden size-4"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="M3 8.5 6.5 12 13 4.5" />
+                          </svg>
+                        </span>
+                      </button>
+                      <span class="step-line mt-2 w-px flex-1 rounded bg-line opacity-0" aria-hidden="true"></span>
+                    </div>
+                    <div class="min-w-0 flex-1 pb-8">
+                      <button
+                        type="button"
+                        data-activate="4"
+                        class="group flex w-full items-center justify-between gap-3 pb-1 pt-0.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      >
+                        <span class="step-title text-base font-semibold">Data Berhasil Dicatat</span>
+                        <svg
+                          class="step-chevron size-4 shrink-0 text-secondary transition-transform duration-300"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </button>
+                      <div class="step-content mt-3" hidden>
+                        <div class="step-card rounded-2xl border border-line bg-white p-5 shadow-sm">
+                          <p class="text-sm leading-relaxed text-secondary">
+                            Satu pesan menjadi satu baris baru di spreadsheet — langsung terbaca.
+                          </p>
+                          <div class="mt-3.5 flex items-center gap-2 rounded-lg bg-success-soft/70 px-3 py-2.5 text-sm font-semibold text-success">
+                            <svg
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              class="size-4 shrink-0"
+                              aria-hidden="true"
+                            >
+                              <path d="M3 8.5 6.5 12 13 4.5" />
+                            </svg>
+                            Tanpa copy-paste. Tanpa input ulang.
+                          </div>
+                          <div class="step-next mt-4 flex justify-end">
+                            <a
+                              href="#contoh"
+                              class="inline-flex items-center gap-1.5 rounded-lg border border-ink/15 bg-white px-3.5 py-2 text-xs font-semibold text-ink shadow-sm transition hover:border-ink/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                            >
+                              Lihat contoh lengkapnya <span aria-hidden="true">↓</span>
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              </ol>
+            </div>
+
+            <!-- RIGHT: live preview -->
+            <div id="howto-preview-wrap" class="hidden lg:block">
+              <p class="mb-3 text-xs font-semibold uppercase tracking-widest text-secondary">
+                Simulasi Langsung
+              </p>
+
+              <!-- Preview 01 -->
+              <div data-preview="0" class="hidden">
+                <div class="overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
+                  <div class="flex items-center gap-2 border-b border-line bg-wa-night px-3.5 py-2.5 text-white">
+                    <svg class="size-4 shrink-0" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+                      <path d="M16.004 3C9.384 3 4 8.383 4 15.001c0 2.119.556 4.189 1.614 6.015L4 29l8.157-1.57a12.06 12.06 0 0 0 3.847.64h.003c6.62 0 12.003-5.383 12.003-12.001S22.624 3 16.004 3zm0 21.912h-.002a9.96 9.96 0 0 1-4.888-1.27l-.35-.208-4.838.93.936-4.717-.227-.364a9.92 9.92 0 0 1-1.536-5.283c0-5.483 4.462-9.912 9.916-9.912 2.644 0 5.128 1.028 6.994 2.897 1.866 1.869 2.894 4.353 2.894 6.998 0 5.484-4.462 9.914-9.916 9.914zm5.438-7.419c-.298-.149-1.76-.868-2.036-.968-.274-.098-.473-.149-.672.15-.199.298-.773.968-.947 1.166-.174.2-.348.224-.647.075-.298-.15-1.258-.464-2.396-1.478-.886-.79-1.482-1.765-1.656-2.062-.173-.298-.019-.46.13-.608.134-.133.298-.347.448-.52.149-.174.199-.299.298-.498.099-.2.05-.374-.025-.523-.074-.15-.672-1.618-.92-2.216-.241-.58-.487-.501-.671-.51l-.571-.01c-.199 0-.52.074-.792.373-.273.298-1.043 1.02-1.043 2.489s1.067 2.888 1.217 3.088c.149.2 2.102 3.208 5.09 4.497.71.307 1.266.49 1.7.626.715.225 1.365.194 1.879.118.574-.086 1.76-.72 2.008-1.414.247-.694.247-1.289.173-1.413-.074-.124-.272-.199-.571-.348z" />
+                    </svg>
+                    <div class="flex-1">
+                      <p class="text-xs font-semibold leading-none">Chat dengan NORA AI</p>
+                      <p class="mt-1 text-[10px] text-white/70">simulasi langkah</p>
+                    </div>
+                    <span class="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white/90">AI mode</span>
+                  </div>
+                  <div class="space-y-2.5 bg-chat px-3.5 py-4">
+                    <div class="flex justify-end">
+                      <div class="max-w-[85%] rounded-xl rounded-tr-sm bg-wa-soft px-3 py-2 font-mono text-xs leading-snug text-ink shadow-sm">/list-session</div>
+                    </div>
+                    <div class="flex justify-start">
+                      <div class="max-w-[85%] rounded-xl rounded-tl-sm bg-white px-3 py-2 text-xs leading-snug text-ink shadow-sm">
+                        Daftar session kamu:<br />1. data mahasiswa
+                      </div>
+                    </div>
+                    <div class="flex justify-end">
+                      <div class="max-w-[85%] rounded-xl rounded-tr-sm bg-wa-soft px-3 py-2 font-mono text-xs leading-snug text-ink shadow-sm">/start data mahasiswa</div>
+                    </div>
+                    <div class="flex justify-start">
+                      <div class="max-w-[85%] rounded-xl rounded-tl-sm bg-white px-3 py-2 text-xs leading-snug text-ink shadow-sm">
+                        Session <span class="font-semibold">data mahasiswa</span> dimulai.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p class="mt-3 text-center text-[11px] text-secondary">
+                  Simulasi WhatsApp — persis seperti pesan yang dikirim ke NORA.
+                </p>
+              </div>
+
+              <!-- Preview 02 -->
+              <div data-preview="1" class="hidden">
+                <div class="overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
+                  <div class="flex items-center gap-2 border-b border-line bg-wa-night px-3.5 py-2.5 text-white">
+                    <svg class="size-4 shrink-0" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+                      <path d="M16.004 3C9.384 3 4 8.383 4 15.001c0 2.119.556 4.189 1.614 6.015L4 29l8.157-1.57a12.06 12.06 0 0 0 3.847.64h.003c6.62 0 12.003-5.383 12.003-12.001S22.624 3 16.004 3zm0 21.912h-.002a9.96 9.96 0 0 1-4.888-1.27l-.35-.208-4.838.93.936-4.717-.227-.364a9.92 9.92 0 0 1-1.536-5.283c0-5.483 4.462-9.912 9.916-9.912 2.644 0 5.128 1.028 6.994 2.897 1.866 1.869 2.894 4.353 2.894 6.998 0 5.484-4.462 9.914-9.916 9.914zm5.438-7.419c-.298-.149-1.76-.868-2.036-.968-.274-.098-.473-.149-.672.15-.199.298-.773.968-.947 1.166-.174.2-.348.224-.647.075-.298-.15-1.258-.464-2.396-1.478-.886-.79-1.482-1.765-1.656-2.062-.173-.298-.019-.46.13-.608.134-.133.298-.347.448-.52.149-.174.199-.299.298-.498.099-.2.05-.374-.025-.523-.074-.15-.672-1.618-.92-2.216-.241-.58-.487-.501-.671-.51l-.571-.01c-.199 0-.52.074-.792.373-.273.298-1.043 1.02-1.043 2.489s1.067 2.888 1.217 3.088c.149.2 2.102 3.208 5.09 4.497.71.307 1.266.49 1.7.626.715.225 1.365.194 1.879.118.574-.086 1.76-.72 2.008-1.414.247-.694.247-1.289.173-1.413-.074-.124-.272-.199-.571-.348z" />
+                    </svg>
+                    <div class="flex-1">
+                      <p class="text-xs font-semibold leading-none">Chat dengan NORA AI</p>
+                      <p class="mt-1 text-[10px] text-white/70">simulasi langkah</p>
+                    </div>
+                    <span class="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white/90">AI mode</span>
+                  </div>
+                  <div class="space-y-2.5 bg-chat px-3.5 py-4">
+                    <div class="flex justify-end">
+                      <div class="max-w-[85%] rounded-xl rounded-tr-sm bg-wa-soft px-3 py-2 font-mono text-xs leading-snug text-ink shadow-sm">
+                        /spreadsheet
+                        <span class="mt-1 block w-full break-all text-[11px] text-secondary">https://docs.google.com/spreadsheets/…</span>
+                      </div>
+                    </div>
+                    <div class="flex justify-start">
+                      <div class="max-w-[85%] rounded-xl rounded-tl-sm bg-white px-3 py-2 text-xs leading-snug text-ink shadow-sm">
+                        Spreadsheet berhasil diset untuk session
+                        <span class="font-semibold">data mahasiswa</span>.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p class="mt-3 text-center text-[11px] text-secondary">
+                  Simulasi WhatsApp — NORA memakai link itu sebagai tujuan penyimpanan.
+                </p>
+              </div>
+
+              <!-- Preview 03 -->
+              <div data-preview="2" class="hidden">
+                <div class="overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
+                  <div class="flex items-center gap-2 border-b border-line bg-wa-night px-3.5 py-2.5 text-white">
+                    <svg class="size-4 shrink-0" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+                      <path d="M16.004 3C9.384 3 4 8.383 4 15.001c0 2.119.556 4.189 1.614 6.015L4 29l8.157-1.57a12.06 12.06 0 0 0 3.847.64h.003c6.62 0 12.003-5.383 12.003-12.001S22.624 3 16.004 3zm0 21.912h-.002a9.96 9.96 0 0 1-4.888-1.27l-.35-.208-4.838.93.936-4.717-.227-.364a9.92 9.92 0 0 1-1.536-5.283c0-5.483 4.462-9.912 9.916-9.912 2.644 0 5.128 1.028 6.994 2.897 1.866 1.869 2.894 4.353 2.894 6.998 0 5.484-4.462 9.914-9.916 9.914zm5.438-7.419c-.298-.149-1.76-.868-2.036-.968-.274-.098-.473-.149-.672.15-.199.298-.773.968-.947 1.166-.174.2-.348.224-.647.075-.298-.15-1.258-.464-2.396-1.478-.886-.79-1.482-1.765-1.656-2.062-.173-.298-.019-.46.13-.608.134-.133.298-.347.448-.52.149-.174.199-.299.298-.498.099-.2.05-.374-.025-.523-.074-.15-.672-1.618-.92-2.216-.241-.58-.487-.501-.671-.51l-.571-.01c-.199 0-.52.074-.792.373-.273.298-1.043 1.02-1.043 2.489s1.067 2.888 1.217 3.088c.149.2 2.102 3.208 5.09 4.497.71.307 1.266.49 1.7.626.715.225 1.365.194 1.879.118.574-.086 1.76-.72 2.008-1.414.247-.694.247-1.289.173-1.413-.074-.124-.272-.199-.571-.348z" />
+                    </svg>
+                    <div class="flex-1">
+                      <p class="text-xs font-semibold leading-none">Chat dengan NORA AI</p>
+                      <p class="mt-1 text-[10px] text-white/70">simulasi langkah</p>
+                    </div>
+                    <span class="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white/90">AI mode</span>
+                  </div>
+                  <div class="space-y-2.5 bg-chat px-3.5 py-4">
+                    <div class="flex justify-start">
+                      <div class="max-w-[90%] rounded-xl rounded-tl-sm bg-white px-3 py-2.5 text-xs leading-snug text-ink shadow-sm">
+                        <p>
+                          Harap tambahkan akses <span class="font-semibold">Editor</span> ke akun
+                          NORA agar dapat mengakses Spreadsheet.
+                        </p>
+                        <div class="mt-2 rounded-lg bg-surface px-2.5 py-1.5 font-mono text-[10.5px] break-all">
+                          nora-sheets@gen-lang-client-0347904718.iam.gserviceaccount.com
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mt-3.5 overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
+                  <div class="flex items-center gap-2 border-b border-line bg-sheets-soft/40 px-4 py-2.5">
+                    <svg class="size-4 shrink-0 text-sheets" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                      <path d="M3 9.5h18M9 9.5v10.5M15 9.5v10.5" />
+                    </svg>
+                    <p class="text-xs font-semibold text-ink">Bagikan — Data Mahasiswa</p>
+                    <span class="ml-auto rounded-full bg-surface px-2 py-0.5 text-[10px] font-medium text-secondary">Google Sheets</span>
+                  </div>
+                  <div class="space-y-2.5 px-4 py-3.5">
+                    <div>
+                      <p class="text-[10px] font-semibold uppercase tracking-wide text-secondary">
+                        Tambahkan orang &amp; grup
+                      </p>
+                      <div class="mt-1.5 flex items-center gap-2 rounded-lg border border-line bg-surface/50 px-3 py-2">
+                        <span class="min-w-0 flex-1 truncate font-mono text-[11px] text-ink">
+                          nora-sheets@gen-lang-client-0347904718.iam.gserviceaccount.com
+                        </span>
+                        <span class="shrink-0 rounded-md bg-white px-2 py-1 text-[10px] font-medium text-ink shadow-sm">
+                          Editor ▾
+                        </span>
+                      </div>
+                    </div>
+                    <div class="flex justify-end gap-2">
+                      <span class="rounded-md bg-surface px-3 py-1.5 text-[11px] font-semibold text-secondary">Batal</span>
+                      <span class="rounded-md bg-sheets px-3 py-1.5 text-[11px] font-semibold text-white">Kirim</span>
+                    </div>
+                  </div>
+                </div>
+                <p class="mt-3 text-center text-[11px] text-secondary">
+                  NORA hanya bisa menulis data jika akunnya punya akses ke spreadsheet.
+                </p>
+              </div>
+
+              <!-- Preview 04 -->
+              <div data-preview="3" class="hidden">
+                <div class="overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
+                  <div class="flex items-center gap-2 border-b border-line bg-wa-night px-3.5 py-2.5 text-white">
+                    <svg class="size-4 shrink-0" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+                      <path d="M16.004 3C9.384 3 4 8.383 4 15.001c0 2.119.556 4.189 1.614 6.015L4 29l8.157-1.57a12.06 12.06 0 0 0 3.847.64h.003c6.62 0 12.003-5.383 12.003-12.001S22.624 3 16.004 3zm0 21.912h-.002a9.96 9.96 0 0 1-4.888-1.27l-.35-.208-4.838.93.936-4.717-.227-.364a9.92 9.92 0 0 1-1.536-5.283c0-5.483 4.462-9.912 9.916-9.912 2.644 0 5.128 1.028 6.994 2.897 1.866 1.869 2.894 4.353 2.894 6.998 0 5.484-4.462 9.914-9.916 9.914zm5.438-7.419c-.298-.149-1.76-.868-2.036-.968-.274-.098-.473-.149-.672.15-.199.298-.773.968-.947 1.166-.174.2-.348.224-.647.075-.298-.15-1.258-.464-2.396-1.478-.886-.79-1.482-1.765-1.656-2.062-.173-.298-.019-.46.13-.608.134-.133.298-.347.448-.52.149-.174.199-.299.298-.498.099-.2.05-.374-.025-.523-.074-.15-.672-1.618-.92-2.216-.241-.58-.487-.501-.671-.51l-.571-.01c-.199 0-.52.074-.792.373-.273.298-1.043 1.02-1.043 2.489s1.067 2.888 1.217 3.088c.149.2 2.102 3.208 5.09 4.497.71.307 1.266.49 1.7.626.715.225 1.365.194 1.879.118.574-.086 1.76-.72 2.008-1.414.247-.694.247-1.289.173-1.413-.074-.124-.272-.199-.571-.348z" />
+                    </svg>
+                    <div class="flex-1">
+                      <p class="text-xs font-semibold leading-none">Chat dengan NORA AI</p>
+                      <p class="mt-1 text-[10px] text-white/70">simulasi langkah</p>
+                    </div>
+                    <span class="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white/90">AI mode</span>
+                  </div>
+                  <div class="space-y-2.5 bg-chat px-3.5 py-4">
+                    <div class="flex justify-end">
+                      <div class="max-w-[85%] rounded-xl rounded-tr-sm bg-wa-soft px-3 py-2 font-mono text-xs leading-snug text-ink shadow-sm">sumanto, 15k, ayam geprek</div>
+                    </div>
+                    <div class="flex justify-start">
+                      <div class="max-w-[90%] rounded-xl rounded-tl-sm bg-white px-3 py-2.5 text-xs leading-snug text-ink shadow-sm">
+                        <p class="font-semibold text-success">✓ Data telah ditambahkan</p>
+                        <p class="mt-1.5 text-[11px] text-secondary">Saya telah menambahkan data berikut ke dalam Sheet1:</p>
+                        <div class="mt-2 space-y-0.5">
+                          <p><span class="text-secondary">No:</span> 3</p>
+                          <p><span class="text-secondary">Nama:</span> Sumanto</p>
+                          <p><span class="text-secondary">Nominal:</span> 15.000</p>
+                          <p><span class="text-secondary">Makanan:</span> Ayam Geprek</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mt-3.5 flex flex-col items-center gap-2.5 rounded-2xl border border-line bg-white px-4 py-4 shadow-sm sm:flex-row sm:justify-center sm:gap-3">
+                  <span class="rounded-lg bg-wa-soft px-2.5 py-1.5 font-mono text-[11px] text-ink shadow-sm">sumanto, 15k, ayam geprek</span>
+                  <svg class="size-3.5 shrink-0 rotate-90 text-accent sm:rotate-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M5 12h14" />
+                    <path d="m13 6 6 6-6 6" />
+                  </svg>
+                  <img class="size-6 rounded-full border border-line bg-white p-0.5" src="/static/icon.png" alt="NORA" />
+                  <svg class="size-3.5 shrink-0 rotate-90 text-accent sm:rotate-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M5 12h14" />
+                    <path d="m13 6 6 6-6 6" />
+                  </svg>
+                  <span class="inline-flex items-center gap-1.5 rounded-lg border border-sheets/25 bg-sheets-soft/60 px-2.5 py-1.5 text-[11px] font-semibold text-ink">
+                    <svg class="size-3.5 shrink-0 text-sheets" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                      <path d="M3 9.5h18M9 9.5v10.5M15 9.5v10.5" />
+                    </svg>
+                    Google Spreadsheet
+                  </span>
+                </div>
+                <p class="mt-3 text-center text-[11px] text-secondary">
+                  Hasil masuk saat itu juga — tanpa perlu membuka spreadsheet.
+                </p>
+              </div>
+
+              <!-- Preview 05 -->
+              <div data-preview="4" class="hidden">
+                <div class="overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
+                  <div class="flex items-center gap-2 border-b border-line px-4 py-2.5">
+                    <svg class="size-4 shrink-0 text-sheets" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                      <path d="M3 9.5h18M9 9.5v10.5M15 9.5v10.5" />
+                    </svg>
+                    <p class="text-xs font-semibold text-ink">Data Mahasiswa</p>
+                    <span class="rounded-md bg-surface px-1.5 py-0.5 text-[10px] font-medium text-secondary">Sheet1</span>
+                    <span class="ml-auto inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-semibold text-success">
+                      <span class="size-1.5 rounded-full bg-success"></span>
+                      Tersambung
+                    </span>
+                  </div>
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                      <thead>
+                        <tr class="bg-sheets-soft/70 text-sheets">
+                          <th class="px-3 py-2 font-semibold">No</th>
+                          <th class="px-3 py-2 font-semibold">Nama</th>
+                          <th class="px-3 py-2 text-right font-semibold">Nominal</th>
+                          <th class="px-3 py-2 font-semibold">Makanan</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr class="border-t border-line text-secondary">
+                          <td class="px-3 py-2">1</td>
+                          <td class="px-3 py-2">Andi</td>
+                          <td class="px-3 py-2 text-right">18.000</td>
+                          <td class="px-3 py-2">Mie Ayam</td>
+                        </tr>
+                        <tr class="border-t border-line text-secondary">
+                          <td class="px-3 py-2">2</td>
+                          <td class="px-3 py-2">Siti</td>
+                          <td class="px-3 py-2 text-right">30.000</td>
+                          <td class="px-3 py-2">Ayam Bakar</td>
+                        </tr>
+                        <tr class="border-t border-line bg-success-soft/60 font-semibold text-ink">
+                          <td class="px-3 py-2">3</td>
+                          <td class="px-3 py-2">Sumanto</td>
+                          <td class="px-3 py-2 text-right">15.000</td>
+                          <td class="px-3 py-2">
+                            <span class="inline-flex items-center gap-1.5">
+                              Ayam Geprek
+                              <span class="rounded-full bg-success px-1.5 py-0.5 text-[9px] font-bold text-white">BARU</span>
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="mt-3.5 flex flex-col items-start gap-2 rounded-2xl border border-line bg-surface/50 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-center sm:gap-3">
+                  <span class="rounded-lg bg-wa-soft px-2.5 py-1.5 font-mono text-[11px] text-ink shadow-sm">kirk, 200k, rendang</span>
+                  <svg class="size-3.5 shrink-0 rotate-90 text-accent sm:rotate-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M5 12h14" />
+                    <path d="m13 6 6 6-6 6" />
+                  </svg>
+                  <span class="inline-flex items-center gap-2 rounded-lg border border-sheets/25 bg-sheets-soft/60 px-2.5 py-1.5 text-[11px] font-semibold text-ink">
+                    <svg class="size-3.5 shrink-0 text-sheets" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                      <path d="M3 9.5h18M9 9.5v10.5M15 9.5v10.5" />
+                    </svg>
+                    4 · Kirk · 200.000 · Rendang
+                  </span>
+                </div>
+                <p class="mt-3 text-center text-[11px] text-secondary">
+                  Setiap pesan = satu baris baru. Kamu hanya perlu mengecek hasilnya.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <script>
+        (function () {
+          const stepper = document.getElementById("howto-steps");
+          if (!stepper) return;
+          const steps = Array.from(stepper.querySelectorAll("li[data-step]"));
+          const total = steps.length;
+          const panels = Array.from(document.querySelectorAll("[data-preview]"));
+          const wrap = document.getElementById("howto-preview-wrap");
+          const mq = window.matchMedia("(min-width: 1024px)");
+          let active = 0;
+
+          const NODE_ACTIVE = ["border-accent", "bg-accent-soft", "text-accent"];
+          const NODE_DONE = ["border-transparent", "bg-ink", "text-white"];
+          const NODE_PENDING = ["border-line", "bg-surface", "text-secondary"];
+          const TITLE = { active: ["text-accent"], done: ["text-ink"], pending: ["text-secondary"] };
+
+          function setState(li, type) {
+            const node = li.querySelector(".step-node");
+            const num = li.querySelector(".step-num");
+            const check = li.querySelector(".step-check");
+            const line = li.querySelector(".step-line");
+            const title = li.querySelector(".step-title");
+            const chev = li.querySelector(".step-chevron");
+            const content = li.querySelector(".step-content");
+            const isOpen = type === "active";
+
+            node.classList.remove(...NODE_ACTIVE, ...NODE_DONE, ...NODE_PENDING);
+            node.classList.add(...(type === "active" ? NODE_ACTIVE : type === "done" ? NODE_DONE : NODE_PENDING));
+            num.classList.toggle("hidden", type === "done");
+            check.classList.toggle("hidden", type !== "done");
+            line.classList.toggle("bg-accent", type === "done");
+            line.classList.toggle("bg-line", type !== "done");
+            title.classList.remove("text-accent", "text-ink", "text-secondary");
+            title.classList.add(...TITLE[type]);
+            chev.classList.toggle("rotate-180", isOpen);
+            chev.classList.toggle("text-accent", isOpen);
+            content.hidden = !isOpen;
+            li.querySelectorAll("[data-activate]").forEach(function (b) {
+              b.setAttribute("aria-expanded", isOpen ? "true" : "false");
+            });
+            if (isOpen) {
+              const card = content.querySelector(".step-card");
+              if (card) {
+                card.classList.remove("animate-fade-up");
+                void card.offsetWidth;
+                card.classList.add("animate-fade-up");
+              }
+            }
+          }
+
+          function revealPanel(panel) {
+            panel.classList.remove("hidden");
+            panel.classList.remove("animate-fade-up");
+            void panel.offsetWidth;
+            panel.classList.add("animate-fade-up");
+          }
+
+          function hidePanels() {
+            panels.forEach(function (p) {
+              if (p.dataset.preview) p.classList.add("hidden");
+            });
+          }
+
+          function positionPreview() {
+            const panel = panels.find(function (p) { return p.dataset.preview === String(active); });
+            if (!panel) return;
+            panel.classList.remove("hidden");
+            if (mq.matches) {
+              panels.forEach(function (p) { wrap.appendChild(p); });
+            } else {
+              const li = steps[active];
+              const nextRow = li.querySelector(".step-next");
+              hidePanels();
+              if (nextRow) {
+                nextRow.parentNode.insertBefore(panel, nextRow);
+                revealPanel(panel);
+              }
+            }
+          }
+
+          function activate(i) {
+            active = Math.max(0, Math.min(total - 1, i));
+            steps.forEach(function (li, idx) {
+              const state = idx < active ? "done" : idx === active ? "active" : "pending";
+              setState(li, state);
+            });
+            panels.forEach(function (p) {
+              const show = p.dataset.preview === String(active);
+              if (show) revealPanel(p);
+              else p.classList.add("hidden");
+            });
+            positionPreview();
+          }
+
+          stepper.addEventListener("click", function (e) {
+            const activateBtn = e.target.closest("[data-activate]");
+            if (activateBtn) { activate(Number(activateBtn.dataset.activate)); return; }
+            const nextBtn = e.target.closest("[data-next]");
+            if (nextBtn) activate(Number(nextBtn.dataset.next));
+          });
+
+          mq.addEventListener ? mq.addEventListener("change", positionPreview) : mq.addListener(positionPreview);
+
+          document.querySelectorAll("[data-copy]").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              const text = btn.dataset.copy;
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).catch(function () {});
+              }
+              const original = btn.textContent;
+              btn.textContent = "Tersalin ✓";
+              btn.classList.add("text-success");
+              setTimeout(function () {
+                btn.textContent = original;
+                btn.classList.remove("text-success");
+              }, 1600);
+            });
+          });
+
+          activate(0);
+        })();
+      </script>
+
+
+      <!-- ===== REAL EXAMPLE ===== -->
+      <section id="contoh" class="px-6 py-20 sm:py-24">
+        <div class="mx-auto w-full max-w-6xl">
+          <div class="mx-auto max-w-2xl text-center">
+            <p class="text-sm font-bold uppercase tracking-widest text-accent">Contoh Nyata</p>
+            <h2 class="mt-3 text-balance text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+              Sesederhana Mengirim Pesan
+            </h2>
+            <p class="mt-4 text-lg text-secondary">
+              Satu pesan dari WhatsApp langsung menjadi satu baris baru di spreadsheet kamu.
+            </p>
+          </div>
+
+          <div class="mt-12 grid items-start gap-6 lg:grid-cols-2">
+            <!-- WhatsApp conversation -->
+            <div class="overflow-hidden rounded-3xl border border-line bg-white shadow-sm">
+              <div class="flex items-center gap-3 bg-wa-night px-4 py-3 text-white">
+                <svg
+                  class="size-5 shrink-0"
+                  viewBox="0 0 32 32"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M16.004 3C9.384 3 4 8.383 4 15.001c0 2.119.556 4.189 1.614 6.015L4 29l8.157-1.57a12.06 12.06 0 0 0 3.847.64h.003c6.62 0 12.003-5.383 12.003-12.001S22.624 3 16.004 3zm0 21.912h-.002a9.96 9.96 0 0 1-4.888-1.27l-.35-.208-4.838.93.936-4.717-.227-.364a9.92 9.92 0 0 1-1.536-5.283c0-5.483 4.462-9.912 9.916-9.912 2.644 0 5.128 1.028 6.994 2.897 1.866 1.869 2.894 4.353 2.894 6.998 0 5.484-4.462 9.914-9.916 9.914zm5.438-7.419c-.298-.149-1.76-.868-2.036-.968-.274-.098-.473-.149-.672.15-.199.298-.773.968-.947 1.166-.174.2-.348.224-.647.075-.298-.15-1.258-.464-2.396-1.478-.886-.79-1.482-1.765-1.656-2.062-.173-.298-.019-.46.13-.608.134-.133.298-.347.448-.52.149-.174.199-.299.298-.498.099-.2.05-.374-.025-.523-.074-.15-.672-1.618-.92-2.216-.241-.58-.487-.501-.671-.51l-.571-.01c-.199 0-.52.074-.792.373-.273.298-1.043 1.02-1.043 2.489s1.067 2.888 1.217 3.088c.149.2 2.102 3.208 5.09 4.497.71.307 1.266.49 1.7.626.715.225 1.365.194 1.879.118.574-.086 1.76-.72 2.008-1.414.247-.694.247-1.289.173-1.413-.074-.124-.272-.199-.571-.348z"
+                  />
+                </svg>
+                <img
+                  class="size-8 rounded-full border border-white/30 bg-white p-0.5"
+                  src="/static/icon.png"
+                  alt="NORA"
+                />
+                <div class="flex-1">
+                  <p class="text-sm font-semibold leading-none">NORA AI</p>
+                  <p class="mt-1 flex items-center gap-1 text-[11px] text-white/75">
+                    <span class="size-1.5 rounded-full bg-wa"></span>
+                    online · session: data mahasiswa
+                  </p>
+                </div>
+                <span
+                  class="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white/90"
+                >
+                  AI mode
+                </span>
+              </div>
+
+              <div class="space-y-3 bg-chat px-4 py-6">
+                <div class="flex justify-center">
+                  <span class="rounded-full bg-white/80 px-3 py-1 text-[11px] text-secondary">Hari ini</span>
+                </div>
+
+                <div class="flex justify-start">
+                  <div class="max-w-[85%] rounded-2xl rounded-tl-sm bg-white px-3.5 py-2.5 text-sm leading-relaxed shadow-sm">
+                    Halo! Kirim data apa pun, aku yang rapikan dan masukkan ke spreadsheet.
+                  </div>
+                </div>
+
+                <div class="flex justify-end">
+                  <div
+                    class="max-w-[85%] rounded-2xl rounded-tr-sm bg-wa-soft px-3.5 py-2.5 text-sm leading-relaxed shadow-sm"
+                  >
+                    <span class="font-mono text-[13px]">sumanto, 15k, ayam geprek</span>
+                  </div>
+                </div>
+
+                <div class="flex justify-end">
+                  <div
+                    class="max-w-[85%] rounded-2xl rounded-tr-sm bg-white/70 px-3 py-2 shadow-sm"
+                    aria-label="NORA sedang mengetik"
+                  >
+                    <span class="flex gap-1">
+                      <span class="size-1.5 rounded-full bg-secondary animate-bounce-dot"></span>
+                      <span class="size-1.5 rounded-full bg-secondary animate-bounce-dot" style="animation-delay: 0.15s"></span>
+                      <span class="size-1.5 rounded-full bg-secondary animate-bounce-dot" style="animation-delay: 0.3s"></span>
+                    </span>
+                  </div>
+                </div>
+
+                <div class="flex justify-start">
+                  <div
+                    class="flex max-w-[85%] flex-col gap-2 rounded-2xl rounded-tl-sm bg-white px-3.5 py-3 text-sm leading-relaxed shadow-sm"
+                  >
+                    <p class="flex items-center gap-1.5 font-semibold text-success">
+                      <svg
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        class="size-3.5"
+                        aria-hidden="true"
+                      >
+                        <path d="M3 8.5 6.5 12 13 4.5" />
+                      </svg>
+                      Data berhasil ditambahkan
+                    </p>
+                    <div class="text-[13px]">
+                      <p><span class="text-secondary">Nama:</span> Sumanto</p>
+                      <p class="mt-0.5">
+                        <span class="text-secondary">Nominal:</span> 15.000
+                      </p>
+                      <p class="mt-0.5">
+                        <span class="text-secondary">Makanan:</span> Ayam Geprek
+                      </p>
+                    </div>
+                    <p class="text-right text-[10px] text-secondary">10:24</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 border-t border-line bg-white px-4 py-2.5">
+                <span class="flex-1 rounded-full bg-surface px-4 py-2 text-sm text-secondary">
+                  Ketik pesan…
+                </span>
+                <span
+                  class="flex size-9 items-center justify-center rounded-full bg-wa-night text-white"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    class="size-4"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M3.4 20.4 21.85 12 3.4 3.6 3.4 10l13 2-13 2z"
+                    />
+                  </svg>
+                </span>
+              </div>
+            </div>
+
+            <!-- Spreadsheet preview -->
+            <div class="overflow-hidden rounded-3xl border border-line bg-white shadow-sm">
+              <div class="flex items-center gap-3 border-b border-line px-4 py-3">
+                <svg
+                  class="size-5 shrink-0 text-sheets"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="M3 9.5h18M9 9.5v10.5M15 9.5v10.5" />
+                </svg>
+                <div class="flex-1">
+                  <p class="text-sm font-semibold leading-none text-ink">Data Mahasiswa</p>
+                  <p class="mt-1 text-[11px] text-secondary">Data order mahasiswa · tiap baris = 1 pesan</p>
+                </div>
+                <span
+                  class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-[11px] font-semibold text-success"
+                >
+                  <span class="size-1.5 rounded-full bg-success"></span>
+                  Tersambung
+                </span>
+              </div>
+
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                  <thead>
+                    <tr class="bg-sheets-soft/70 text-sheets">
+                      <th class="w-12 px-4 py-2.5 font-semibold">No</th>
+                      <th class="px-4 py-2.5 font-semibold">Nama</th>
+                      <th class="px-4 py-2.5 text-right font-semibold">Nominal</th>
+                      <th class="px-4 py-2.5 font-semibold">Makanan</th>
+                    </tr>
+                  </thead>
+                  <tbody class="text-secondary">
+                    <tr class="border-t border-line">
+                      <td class="px-4 py-2.5">1</td>
+                      <td class="px-4 py-2.5">Kirk</td>
+                      <td class="px-4 py-2.5 text-right">200.000</td>
+                      <td class="px-4 py-2.5">Rendang</td>
+                    </tr>
+                    <tr class="border-t border-line">
+                      <td class="px-4 py-2.5">2</td>
+                      <td class="px-4 py-2.5">Budi</td>
+                      <td class="px-4 py-2.5 text-right">25.000</td>
+                      <td class="px-4 py-2.5">Nasi Goreng</td>
+                    </tr>
+                    <tr class="border-t border-line bg-success-soft/60">
+                      <td class="px-4 py-2.5 font-semibold text-ink">3</td>
+                      <td class="px-4 py-2.5 font-semibold text-ink">Sumanto</td>
+                      <td class="px-4 py-2.5 text-right font-semibold text-ink">15.000</td>
+                      <td class="px-4 py-2.5">
+                        <span class="inline-flex items-center gap-2 font-semibold text-ink">
+                          Ayam Geprek
+                          <span
+                            class="rounded-full bg-success px-2 py-0.5 text-[10px] font-bold text-white"
+                          >
+                            Baru
+                          </span>
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="flex items-center justify-between border-t border-line bg-surface/50 px-4 py-3 text-xs text-secondary">
+                <span>3 data · Sheet1</span>
+                <span>terakhir ditambahkan 10:24</span>
+              </div>
+            </div>
+          </div>
+
+          <p class="mt-8 text-center text-sm text-secondary">
+            Tanpa copy-paste. Tanpa format kaku.
+            <span class="font-semibold text-ink">Cukup kirim pesan seperti biasa.</span>
+          </p>
+        </div>
+      </section>
+
+      <!-- ===== COMMANDS ===== -->
+      <section id="command" class="bg-surface px-6 py-20 sm:py-24">
+        <div class="mx-auto w-full max-w-6xl">
+          <div class="mx-auto max-w-2xl text-center">
+            <p class="text-sm font-bold uppercase tracking-widest text-accent">Kontrol</p>
+            <h2 class="mt-3 text-balance text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+              Command yang Sering Dipakai
+            </h2>
+            <p class="mt-4 text-lg text-secondary">
+              Semua dikontrol lewat chat WhatsApp. Fokus pada 4 command ini dulu.
+            </p>
+          </div>
+
+          <div class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <a
+              href="#cara-kerja"
+              class="group flex flex-col gap-3 rounded-2xl border border-line bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <span
+                class="w-fit rounded-lg bg-accent-soft px-2.5 py-1 font-mono text-sm font-semibold text-accent"
+              >
+                /spreadsheet
+              </span>
+              <p class="text-sm leading-relaxed text-secondary">
+                Hubungkan Google Spreadsheet dengan session aktif.
+              </p>
+            </a>
+            <a
+              href="#cara-kerja"
+              class="group flex flex-col gap-3 rounded-2xl border border-line bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <span
+                class="w-fit rounded-lg bg-accent-soft px-2.5 py-1 font-mono text-sm font-semibold text-accent"
+              >
+                /list-session
+              </span>
+              <p class="text-sm leading-relaxed text-secondary">
+                Melihat session yang tersedia untuk dipilih.
+              </p>
+            </a>
+            <a
+              href="#cara-kerja"
+              class="group flex flex-col gap-3 rounded-2xl border border-line bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <span
+                class="w-fit rounded-lg bg-accent-soft px-2.5 py-1 font-mono text-sm font-semibold text-accent"
+              >
+                /start
+              </span>
+              <p class="text-sm leading-relaxed text-secondary">
+                Memulai atau berpindah ke session tertentu.
+              </p>
+            </a>
+            <a
+              href="#fitur"
+              class="group flex flex-col gap-3 rounded-2xl border border-line bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <span
+                class="w-fit rounded-lg bg-accent-soft px-2.5 py-1 font-mono text-sm font-semibold text-accent"
+              >
+                /quit
+              </span>
+              <p class="text-sm leading-relaxed text-secondary">
+                Keluar dari AI mode setelah selesai.
+              </p>
+            </a>
+          </div>
+
+          <div class="mt-8 flex justify-center">
+            <span
+              class="inline-flex items-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-xs text-secondary shadow-sm"
+            >
+              Untuk daftar command lengkap, kirim
+              <code class="font-mono font-semibold text-ink">/help</code> di WhatsApp.
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== FEATURES ===== -->
+      <section id="fitur" class="px-6 py-20 sm:py-24">
+        <div class="mx-auto w-full max-w-6xl">
+          <div class="mx-auto max-w-2xl text-center">
+            <p class="text-sm font-bold uppercase tracking-widest text-accent">Fitur</p>
+            <h2 class="mt-3 text-balance text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+              Terbuat untuk Alur Kerja Sehari-hari
+            </h2>
+            <p class="mt-4 text-lg text-secondary">
+              Tidak perlu belajar alat baru. NORA bekerja di tempat data sudah masuk.
+            </p>
+          </div>
+
+          <div class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="rounded-2xl border border-line bg-white p-6 shadow-sm">
+              <span
+                class="flex size-11 items-center justify-center rounded-xl bg-wa-soft text-wa-night"
+              >
+                <svg
+                  class="size-6"
+                  viewBox="0 0 32 32"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M16.004 3C9.384 3 4 8.383 4 15.001c0 2.119.556 4.189 1.614 6.015L4 29l8.157-1.57a12.06 12.06 0 0 0 3.847.64h.003c6.62 0 12.003-5.383 12.003-12.001S22.624 3 16.004 3zm0 21.912h-.002a9.96 9.96 0 0 1-4.888-1.27l-.35-.208-4.838.93.936-4.717-.227-.364a9.92 9.92 0 0 1-1.536-5.283c0-5.483 4.462-9.912 9.916-9.912 2.644 0 5.128 1.028 6.994 2.897 1.866 1.869 2.894 4.353 2.894 6.998 0 5.484-4.462 9.914-9.916 9.914zm5.438-7.419c-.298-.149-1.76-.868-2.036-.968-.274-.098-.473-.149-.672.15-.199.298-.773.968-.947 1.166-.174.2-.348.224-.647.075-.298-.15-1.258-.464-2.396-1.478-.886-.79-1.482-1.765-1.656-2.062-.173-.298-.019-.46.13-.608.134-.133.298-.347.448-.52.149-.174.199-.299.298-.498.099-.2.05-.374-.025-.523-.074-.15-.672-1.618-.92-2.216-.241-.58-.487-.501-.671-.51l-.571-.01c-.199 0-.52.074-.792.373-.273.298-1.043 1.02-1.043 2.489s1.067 2.888 1.217 3.088c.149.2 2.102 3.208 5.09 4.497.71.307 1.266.49 1.7.626.715.225 1.365.194 1.879.118.574-.086 1.76-.72 2.008-1.414.247-.694.247-1.289.173-1.413-.074-.124-.272-.199-.571-.348z"
+                  />
+                </svg>
+              </span>
+              <h3 class="mt-4 text-base font-semibold text-ink">WhatsApp Native</h3>
+              <p class="mt-2 text-sm leading-relaxed text-secondary">
+                Kirim data langsung dari WhatsApp, tanpa dashboard atau aplikasi tambahan.
+              </p>
+            </div>
+
+            <div class="rounded-2xl border border-line bg-white p-6 shadow-sm">
+              <span class="flex size-11 items-center justify-center rounded-xl bg-accent-soft text-accent">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  class="size-6"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M12 2.5l1.8 5.1a2 2 0 0 0 1.2 1.2l5.1 1.8-5.1 1.8a2 2 0 0 0-1.2 1.2L12 19l-1.8-5.1a2 2 0 0 0-1.2-1.2l-5.1-1.8 5.1-1.8a2 2 0 0 0 1.2-1.2L12 2.5z"
+                  />
+                  <path
+                    d="M19 15l.8 2.2a1 1 0 0 0 .6.6l2.2.8-2.2.8a1 1 0 0 0-.6.6L19 22.2l-.8-2.2a1 1 0 0 0-.6-.6l-2.2-.8 2.2-.8a1 1 0 0 0 .6-.6L19 15zm-10.5-3l.7 1.9a1.2 1.2 0 0 0 .7.7l1.9.7-1.9.7a1.2 1.2 0 0 0-.7.7L8.5 20.6l-.7-1.9a1.2 1.2 0 0 0-.7-.7l-1.9-.7 1.9-.7a1.2 1.2 0 0 0 .7-.7l.7-1.9z"
+                  />
+                </svg>
+              </span>
+              <h3 class="mt-4 text-base font-semibold text-ink">AI Data Extraction</h3>
+              <p class="mt-2 text-sm leading-relaxed text-secondary">
+                NORA memahami pesan dengan format natural dan mengambil informasi yang relevan.
+              </p>
+            </div>
+
+            <div class="rounded-2xl border border-line bg-white p-6 shadow-sm">
+              <span class="flex size-11 items-center justify-center rounded-xl bg-sheets-soft text-sheets">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  class="size-6"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="M3 9.5h18M9 9.5v10.5M15 9.5v10.5" />
+                </svg>
+              </span>
+              <h3 class="mt-4 text-base font-semibold text-ink">Google Spreadsheet Integration</h3>
+              <p class="mt-2 text-sm leading-relaxed text-secondary">
+                Data langsung ditambahkan ke spreadsheet yang sudah kamu gunakan.
+              </p>
+            </div>
+
+            <div class="rounded-2xl border border-line bg-white p-6 shadow-sm">
+              <span class="flex size-11 items-center justify-center rounded-xl bg-surface text-ink">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linejoin="round"
+                  class="size-6"
+                  aria-hidden="true"
+                >
+                  <path d="M12 3 3 8l9 5 9-5-9-5z" />
+                  <path d="M3 12l9 5 9-5" stroke-linecap="round" />
+                  <path d="M3 16l9 5 9-5" stroke-linecap="round" />
+                </svg>
+              </span>
+              <h3 class="mt-4 text-base font-semibold text-ink">Session-based Workflow</h3>
+              <p class="mt-2 text-sm leading-relaxed text-secondary">
+                Setiap session punya konteks dan spreadsheet tujuan masing-masing.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== USE CASE ===== -->
+      <section class="px-6 pb-20 sm:pb-24">
+        <div class="mx-auto w-full max-w-6xl">
+          <div class="mx-auto max-w-2xl text-center">
+            <p class="text-sm font-bold uppercase tracking-widest text-accent">Use Case</p>
+            <h2 class="mt-3 text-balance text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+              Untuk Siapa NORA?
+            </h2>
+            <p class="mt-4 text-lg text-secondary">
+              Siapa pun yang rutin menerima data lewat WhatsApp dan menyimpannya di spreadsheet.
+            </p>
+          </div>
+
+          <div class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="flex items-start gap-4 rounded-2xl border border-line bg-white p-5 shadow-sm">
+              <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="size-5"
+                  aria-hidden="true"
+                >
+                  <path d="M12 3 2 8l10 5 10-5-10-5z" />
+                  <path d="m2 15 10 5 10-5M2 11.5 12 16.5l10-5" />
+                </svg>
+              </span>
+              <div>
+                <h3 class="text-base font-semibold text-ink">Dosen</h3>
+                <p class="mt-1 text-sm text-secondary">mencatat data mahasiswa & bimbingan</p>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-4 rounded-2xl border border-line bg-white p-5 shadow-sm">
+              <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="size-5"
+                  aria-hidden="true"
+                >
+                  <rect x="5" y="4" width="14" height="17" rx="2" />
+                  <path d="M9 4.5V3h6v1.5M9 9h6M9 13h6M9 17h3.5" />
+                </svg>
+              </span>
+              <div>
+                <h3 class="text-base font-semibold text-ink">Admin</h3>
+                <p class="mt-1 text-sm text-secondary">mengumpulkan data dari WhatsApp</p>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-4 rounded-2xl border border-line bg-white p-5 shadow-sm">
+              <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="size-5"
+                  aria-hidden="true"
+                >
+                  <path d="M4 4h16v5H4z" />
+                  <path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 14h4" />
+                </svg>
+              </span>
+              <div>
+                <h3 class="text-base font-semibold text-ink">UMKM</h3>
+                <p class="mt-1 text-sm text-secondary">mencatat order pelanggan</p>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-4 rounded-2xl border border-line bg-white p-5 shadow-sm">
+              <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="size-5"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="5" width="18" height="16" rx="2" />
+                  <path d="M8 3v4M16 3v4M3 10h18" />
+                </svg>
+              </span>
+              <div>
+                <h3 class="text-base font-semibold text-ink">Panitia & Event</h3>
+                <p class="mt-1 text-sm text-secondary">mengumpulkan data peserta</p>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-4 rounded-2xl border border-line bg-white p-5 shadow-sm">
+              <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface text-ink">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="size-5"
+                  aria-hidden="true"
+                >
+                  <path d="M17 8a5 5 0 1 0-9.9 1.4S7 14 3 18c2 1 4.3 1 7 .7 2 .2 4.3.2 7-.7-4-4-4.1-8.6-4.1-8.6A5 5 0 0 0 17 8z" />
+                  <circle cx="9" cy="8" r="0.5" fill="currentColor" />
+                  <circle cx="12" cy="8" r="0.5" fill="currentColor" />
+                  <circle cx="15" cy="8" r="0.5" fill="currentColor" />
+                </svg>
+              </span>
+              <div>
+                <h3 class="text-base font-semibold text-ink">Tim</h3>
+                <p class="mt-1 text-sm text-secondary">mencatat data operasional</p>
+              </div>
+            </div>
+
+            <a
+              href="https://wa.me/{{ phone_number }}?text=%2Fhelp"
+              target="_blank"
+              rel="noopener"
+              class="group flex items-start gap-4 rounded-2xl border border-accent/20 bg-accent-soft p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <span
+                class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-white"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="size-5"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12h14" />
+                  <path d="m13 6 6 6-6 6" />
+                </svg>
+              </span>
+              <div>
+                <h3 class="text-base font-semibold text-accent">Kamu?</h3>
+                <p class="mt-1 text-sm font-medium text-ink">
+                  Mulai gunakan NORA <span class="text-accent">→</span>
+                </p>
+              </div>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== FINAL CTA ===== -->
+      <section id="cta" class="px-6 pb-20">
+        <div class="mx-auto w-full max-w-6xl">
+          <div
+            class="relative overflow-hidden rounded-3xl bg-ink px-6 py-16 text-center sm:py-20"
+          >
+            <div
+              class="pointer-events-none absolute -right-24 -top-24 size-72 rounded-full bg-accent/25 blur-3xl"
+              aria-hidden="true"
+            ></div>
+            <div
+              class="pointer-events-none absolute -bottom-28 -left-20 size-72 rounded-full bg-sheets/20 blur-3xl"
+              aria-hidden="true"
+            ></div>
+
+            <div class="relative">
+              <p class="text-sm font-semibold uppercase tracking-widest text-white/60">
+                Siap mulai?
+              </p>
+              <h2
+                class="mx-auto mt-4 max-w-2xl text-balance text-3xl font-bold tracking-tight text-white sm:text-5xl"
+              >
+                Berhenti Memindahkan Data Secara Manual.
+              </h2>
+              <p class="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-white/70">
+                Kirim data lewat WhatsApp. Biarkan NORA yang merapikan dan memasukkannya ke
+                spreadsheet.
+              </p>
+              <a
+                class="mt-9 inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-8 py-4 text-base font-semibold text-white shadow-lg shadow-accent/25 transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                href="https://wa.me/{{ phone_number }}?text=%2Fhelp"
+                target="_blank"
+                rel="noopener"
+              >
+                Mulai Gunakan NORA
+              </a>
+              <p class="mt-5 text-xs text-white/50">
+                Chat langsung ke NORA di WhatsApp (+62 877-7553-5532) — pesan
+                <span class="font-mono text-white/70">/help</span> sudah terisi otomatis.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="border-t border-line px-6 py-10">
+      <div
+        class="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left"
+      >
+        <a href="#hero" class="flex items-center gap-2.5">
+          <img class="size-7" src="/static/icon.png" alt="NORA" />
+          <span class="text-sm font-bold text-ink">NORA</span>
+        </a>
+        <p class="text-xs text-secondary">
+          Masukkan data dari WhatsApp ke Google Spreadsheet, tanpa copy-paste manual.
+        </p>
+        <p class="text-xs text-secondary">© 2026 NORA</p>
+      </div>
+    </footer>
+{% endblock %}

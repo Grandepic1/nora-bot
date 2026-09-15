@@ -1,17 +1,7 @@
 from datetime import datetime, timezone
-from pathlib import Path
-
-from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.models.pending_sheet_action import PendingSheetAction
-
-TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
-templates = Environment(
-    loader=FileSystemLoader(TEMPLATES_DIR),
-    autoescape=select_autoescape(("html",)),
-    trim_blocks=True,
-    lstrip_blocks=True,
-)
+from app.web.templating import templates
 
 
 def render_sheet_preview(
@@ -57,6 +47,12 @@ def _preview_context(
         "successful": status == "succeeded",
         "operation": action.operation,
         "error": error,
+        "destructive": bool(preview.get("destructive")),
+        "action_label": (
+            "Hapus dari Sheets"
+            if preview.get("destructive")
+            else "Terapkan ke Sheets"
+        ),
     }
 
     if status != "pending":
@@ -99,12 +95,20 @@ def _preview_context(
         return context
 
     arguments = action.arguments
-    if action.operation in {"append_rows", "update_row", "update_cells"}:
-        values = (
-            arguments["values"]
-            if action.operation in {"append_rows", "update_cells"}
-            else [arguments["values"]]
-        )
+    if action.operation in {
+        "append_rows",
+        "update_row",
+        "update_cells",
+        "delete_row",
+    }:
+        if action.operation == "delete_row":
+            values = preview["rows"]
+        else:
+            values = (
+                arguments["values"]
+                if action.operation in {"append_rows", "update_cells"}
+                else [arguments["values"]]
+            )
         first_number = int(preview.get("row_number", 1))
         rows = []
         for row_index, row in enumerate(values):
@@ -124,10 +128,21 @@ def _preview_context(
             columns=preview["columns"],
             rows=rows,
             detected=len(rows),
-            ready=sum(
-                all(str(cell["value"]).strip() for cell in row["cells"])
-                for row in rows
+            ready=(
+                len(rows)
+                if action.operation == "delete_row"
+                else sum(
+                    all(str(cell["value"]).strip() for cell in row["cells"])
+                    for row in rows
+                )
             ),
+            editable=action.operation != "delete_row",
+        )
+    elif action.operation == "delete_sheet":
+        context.update(
+            deleted_sheet_name=arguments["sheet_name"],
+            detected=1,
+            ready=1,
         )
     else:
         field_name = (

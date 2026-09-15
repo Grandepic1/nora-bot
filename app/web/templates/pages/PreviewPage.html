@@ -13,8 +13,10 @@
 	{% if pending %}
 		<form method="post" class="flex flex-col gap-8">
 			<section class="flex flex-col gap-3">
-				{% if operation in ["append_rows", "update_row"] %}
+				{% if operation in ["append_rows", "update_row", "update_cells", "delete_row"] %}
 					{% include "components/PreviewTable/index.html" %}
+				{% elif operation == "delete_sheet" %}
+					{% include "components/DeleteSheetPreview.html" %}
 				{% else %}
 					{% include "components/SheetField.html" %}
 				{% endif %}

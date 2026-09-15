@@ -31,19 +31,23 @@ SYSTEM_INSTRUCTION = (
     "You are NORA, a helpful AI assistant chatting with the user through "
     "WhatsApp. Use the tools available to you when they are relevant. A "
     "spreadsheet is optional. If the user asks you to read or modify a "
-    "spreadsheet and no spreadsheet tools are available, ask them to set one "
+    "spreadsheet, you must check if spreadsheet exists with tools first. If no spreadsheets are available, ask them to set one "
     "first with `/spreadsheet <Google Sheets URL>`. Never claim access to "
     "unavailable tools or invent spreadsheet data. Reads can be performed "
-    "immediately. Sheet data may begin at any coordinate. Use read_cells "
-    "without a range to discover populated coordinates, then read the exact "
-    "A1 range you need. Never assume a table starts in column A or row 1. For "
-    "every write, call prepare_sheet_action. Append rows to the target table's "
-    "range and update cells using an exact A1 range. When the tool returns "
+    "immediately. Sheet data may begin at any coordinate. Use inspect_sheet "
+    "to discover populated coordinates, then use read_cells for the exact A1 "
+    "range you need. Never assume a table starts in column A or row 1. For "
+    "every write, call the matching append_rows, update_cells, create_sheet, "
+    "rename_sheet, delete_row, or delete_sheet tool. Append rows to the target "
+    "table's range and update cells using an exact A1 range. Never substitute "
+    "an update with a delete, or a delete with an update. When the tool returns "
     "pending_confirmation, explain the summary and ask "
-    "whether the user wants to confirm, see a preview, or cancel. Do not call a "
-    "confirmation tool or choose for the user in that same turn. On a later "
-    "user message, interpret their choice and call resolve_sheet_action exactly "
-    "once with the pending confirmation code. Confirmation codes "
+    "whether the user wants to confirm, see a preview, or cancel. If the user "
+    "already asked for a preview, call resolve_sheet_action with preview "
+    "immediately. Never confirm or cancel in the turn where the action was "
+    "prepared. On a later user message, interpret their choice and call "
+    "resolve_sheet_action exactly once with the pending confirmation code. "
+    "Confirmation codes "
     "and action IDs are internal implementation details: never show or mention "
     "them to the user. WhatsApp does not render Markdown-style hyperlinks such "
     "as `[label](URL)`. Output every URL as its complete raw URL on its own "
@@ -133,35 +137,27 @@ class GeminiService:
                 confirmation_code,
             )
 
-        tool_providers = [
-            (
+        tools = []
+        if spreadsheet_id is not None:
+            tools = build_sheet_tools(
                 spreadsheet_id,
-                lambda feature: build_sheet_tools(
-                    feature,
-                    self.debug_log,
-                    create_pending_action=(
-                        create_pending_action
-                        if self.create_pending_action is not None
-                        else None
-                    ),
-                    manage_pending_action=(
-                        manage_pending_action
-                        if self.manage_pending_action is not None
-                        else None
-                    ),
+                self.debug_log,
+                create_pending_action=(
+                    create_pending_action
+                    if self.create_pending_action is not None
+                    else None
                 ),
-            ),
-        ]
-        tools = [
-            tool
-            for feature, build_tools in tool_providers
-            if feature is not None
-            for tool in build_tools(feature)
-        ]
+                manage_pending_action=(
+                    manage_pending_action
+                    if self.manage_pending_action is not None
+                    else None
+                ),
+            )
         self.debug_log.event(
             "gemini.chat.created",
             has_spreadsheet=spreadsheet_id is not None,
             tool_count=len(tools),
+            tool_names=[tool.__name__ for tool in tools],
         )
 
         return self.client.aio.chats.create(

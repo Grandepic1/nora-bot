@@ -1,12 +1,16 @@
 import unittest
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+from google.genai import _extra_utils, types
 
 import app.tools.sheets as sheet_tools
 from app.models.pending_sheet_action import PendingSheetAction
 from app.services.google_sheets import GoogleSheetsService
 from app.services.pending_sheet_actions import (
+    ActionConflict,
     InvalidActionEdit,
     PendingSheetActionService,
 )
@@ -43,27 +47,23 @@ class SheetToolConfirmationTests(unittest.IsolatedAsyncioTestCase):
         )
         by_name = {tool.__name__: tool for tool in tools}
 
-        result = await by_name["prepare_sheet_action"](
-            "append_rows",
+        result = await by_name["append_rows"](
             sheet_name="Data",
             cell_range="K20:M",
             values=[["A", 1]],
         )
-        await by_name["prepare_sheet_action"](
-            "update_cells",
+        await by_name["update_cells"](
             sheet_name="Data",
             cell_range="K21:L21",
             values=[["B", 2]],
         )
-        await by_name["prepare_sheet_action"](
-            "create_sheet",
-            title="Archive",
-        )
-        await by_name["prepare_sheet_action"](
-            "rename_sheet",
+        await by_name["create_sheet"](title="Archive")
+        await by_name["rename_sheet"](
             sheet_name="Data",
             new_name="Current",
         )
+        await by_name["delete_row"](sheet_name="Current", row_number=7)
+        await by_name["delete_sheet"](sheet_name="Archive")
 
         self.assertEqual(result["status"], "pending_confirmation")
         self.assertNotIn("url", result)
@@ -72,6 +72,14 @@ class SheetToolConfirmationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[1][0], "update_cells")
         self.assertEqual(calls[2][0], "create_sheet")
         self.assertEqual(calls[3][0], "rename_sheet")
+        self.assertEqual(
+            calls[4],
+            ("delete_row", {"sheet_name": "Current", "row_number": 7}),
+        )
+        self.assertEqual(
+            calls[5],
+            ("delete_sheet", {"sheet_name": "Archive"}),
+        )
         self.assertEqual(
             calls[0][1],
             {
@@ -86,7 +94,7 @@ class SheetToolConfirmationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             [tool.__name__ for tool in tools],
-            ["list_sheets", "read_cells"],
+            ["list_sheets", "inspect_sheet", "read_cells"],
         )
 
     async def test_confirmation_tools_delegate_ai_choice(self):
@@ -109,8 +117,14 @@ class SheetToolConfirmationTests(unittest.IsolatedAsyncioTestCase):
             list(by_name),
             [
                 "list_sheets",
+                "inspect_sheet",
                 "read_cells",
-                "prepare_sheet_action",
+                "append_rows",
+                "update_cells",
+                "create_sheet",
+                "rename_sheet",
+                "delete_row",
+                "delete_sheet",
                 "resolve_sheet_action",
             ],
         )
@@ -126,6 +140,129 @@ class SheetToolConfirmationTests(unittest.IsolatedAsyncioTestCase):
                 ("preview", "abc123"),
                 ("cancel", "abc123"),
             ],
+        )
+
+    async def test_sdk_can_invoke_every_write_and_confirmation_tool(self):
+        prepared = []
+        resolved = []
+
+        async def create_pending(operation, arguments):
+            prepared.append((operation, arguments))
+            return {"status": "pending_confirmation"}
+
+        async def manage_pending(choice, code):
+            resolved.append((choice, code))
+            return {"status": "pending"}
+
+        tools = {
+            tool.__name__: tool
+            for tool in sheet_tools.build_sheet_tools(
+                "spreadsheet-id",
+                create_pending_action=create_pending,
+                manage_pending_action=manage_pending,
+            )
+        }
+        calls = [
+            ("append_rows", {
+                "sheet_name": "Data", "cell_range": "K20:N",
+                "values": [["Ada", 10, 2.5, True]],
+            }),
+            ("update_cells", {
+                "sheet_name": "Data", "cell_range": "K21:N21",
+                "values": [["", 0, -2.5, False]],
+            }),
+            ("create_sheet", {"title": "Archive"}),
+            ("rename_sheet", {"sheet_name": "Data", "new_name": "Current"}),
+            ("delete_row", {"sheet_name": "Current", "row_number": 7.0}),
+            ("delete_sheet", {"sheet_name": "Archive"}),
+        ]
+        calls.extend(
+            ("resolve_sheet_action", {"choice": choice, "confirmation_code": "abc123"})
+            for choice in ("preview", "confirm", "cancel")
+        )
+        for name, arguments in calls:
+            with self.subTest(tool=name, arguments=arguments):
+                response = types.GenerateContentResponse(candidates=[
+                    types.Candidate(content=types.Content(parts=[
+                        types.Part.from_function_call(name=name, args=arguments),
+                    ])),
+                ])
+                # Direct Python calls and schema checks skip the SDK's argument
+                # conversion. Exercise the same path used by automatic calling.
+                parts = await _extra_utils.get_function_response_parts_async(
+                    response, tools,
+                )
+                result = parts[0].function_response.response
+                self.assertNotIn("error", result)
+
+        self.assertEqual([operation for operation, _ in prepared], [name for name, _ in calls[:6]])
+        self.assertEqual(prepared[0][1]["values"], [["Ada", 10, 2.5, True]])
+        self.assertEqual(prepared[1][1]["values"], [["", 0, -2.5, False]])
+        self.assertIs(type(prepared[4][1]["row_number"]), int)
+        self.assertEqual(resolved, [(choice, "abc123") for choice in ("preview", "confirm", "cancel")])
+
+    def test_generated_write_schemas_use_concrete_required_types(self):
+        async def create_pending(operation, arguments):
+            return {"status": "pending_confirmation"}
+
+        tools = sheet_tools.build_sheet_tools(
+            "spreadsheet-id",
+            create_pending_action=create_pending,
+        )
+        declarations = {
+            tool.__name__: types.FunctionDeclaration.from_callable_with_api_option(
+                callable=tool,
+                api_option="GEMINI_API",
+                use_json_schema=True,
+            )
+            for tool in tools
+        }
+
+        create_schema = declarations["create_sheet"].parameters_json_schema
+        self.assertEqual(
+            create_schema["properties"]["title"]["type"],
+            "string",
+        )
+        self.assertEqual(create_schema["required"], ["title"])
+
+        update_schema = declarations["update_cells"].parameters_json_schema
+        self.assertEqual(
+            update_schema["properties"]["sheet_name"]["type"],
+            "string",
+        )
+        self.assertEqual(
+            update_schema["properties"]["cell_range"]["type"],
+            "string",
+        )
+        self.assertEqual(
+            update_schema["properties"]["values"]["type"],
+            "array",
+        )
+        self.assertEqual(
+            update_schema["required"],
+            ["sheet_name", "cell_range", "values"],
+        )
+
+        delete_schema = declarations["delete_row"].parameters_json_schema
+        self.assertEqual(
+            delete_schema["properties"]["row_number"]["type"],
+            "integer",
+        )
+        self.assertEqual(
+            delete_schema["required"],
+            ["sheet_name", "row_number"],
+        )
+
+        inspect_schema = declarations["inspect_sheet"].parameters_json_schema
+        self.assertEqual(inspect_schema["required"], ["sheet_name"])
+        read_schema = declarations["read_cells"].parameters_json_schema
+        self.assertEqual(
+            read_schema["properties"]["cell_range"]["type"],
+            "string",
+        )
+        self.assertEqual(
+            read_schema["required"],
+            ["sheet_name", "cell_range"],
         )
 
 
@@ -225,17 +362,39 @@ class GoogleSheetsCoordinateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "3-column append range"):
             service._header_range("K20:M", 4)
 
+    def test_delete_uses_confirmed_sheet_id_without_name_lookup(self):
+        service, _ = self.make_service({})
+        api = MagicMock()
+        service._service = lambda: nullcontext(api)
+
+        service.delete_row("spreadsheet-id", "Data", 7, sheet_id=42)
+        service.delete_sheet("spreadsheet-id", "Data", sheet_id=42)
+
+        api.spreadsheets.return_value.get.assert_not_called()
+        calls = api.spreadsheets.return_value.batchUpdate.call_args_list
+        self.assertEqual(
+            calls[0].kwargs["body"]["requests"][0]["deleteDimension"]["range"][
+                "sheetId"
+            ],
+            42,
+        )
+        self.assertEqual(
+            calls[1].kwargs["body"]["requests"][0]["deleteSheet"]["sheetId"],
+            42,
+        )
+
 
 class PendingCoordinateActionTests(unittest.IsolatedAsyncioTestCase):
-    def make_service(self, values):
+    def make_service(self, values, sheets=None):
         class CoordinateSheets:
             def __init__(self):
                 self.ranges = []
+                self.calls = []
 
             def get_spreadsheet_info(self, spreadsheet_id):
                 return {
                     "title": "Coordinate Data",
-                    "sheets": [{"title": "Data", "sheet_id": 7}],
+                    "sheets": sheets or [{"title": "Data", "sheet_id": 7}],
                 }
 
             def read_cells(self, spreadsheet_id, sheet_name, cell_range):
@@ -245,6 +404,25 @@ class PendingCoordinateActionTests(unittest.IsolatedAsyncioTestCase):
                     "start_column": "K",
                     "start_row": 20,
                 }
+
+            def read_row(self, spreadsheet_id, sheet_name, row_number):
+                return ["Name", "Amount"] if row_number == 1 else values[0]
+
+            def delete_row(
+                self,
+                spreadsheet_id,
+                sheet_name,
+                row_number,
+                sheet_id,
+            ):
+                self.calls.append(
+                    ("delete_row", sheet_name, row_number, sheet_id)
+                )
+                return {"deleted": True, "row_number": row_number}
+
+            def delete_sheet(self, spreadsheet_id, sheet_name, sheet_id):
+                self.calls.append(("delete_sheet", sheet_name, sheet_id))
+                return {"deleted": True, "sheet_name": sheet_name}
 
         service = object.__new__(PendingSheetActionService)
         service.sheets = CoordinateSheets()
@@ -283,6 +461,129 @@ class PendingCoordinateActionTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
+    async def test_delete_row_builds_snapshot_and_dispatches(self):
+        service = self.make_service([["Ada", 10]])
+
+        arguments, preview = await service._build_preview(
+            "spreadsheet-id",
+            "delete_row",
+            {"sheet_name": "Data", "row_number": 7},
+        )
+        result = await service._execute(
+            SimpleNamespace(
+                operation="delete_row",
+                spreadsheet_id="spreadsheet-id",
+                arguments=arguments,
+                preview=preview,
+            )
+        )
+
+        self.assertEqual(preview["before"], ["Ada", 10])
+        self.assertTrue(preview["destructive"])
+        self.assertEqual(result["row_number"], 7)
+        self.assertEqual(
+            service.sheets.calls,
+            [("delete_row", "Data", 7, 7)],
+        )
+
+    async def test_delete_sheet_requires_another_sheet_and_dispatches(self):
+        service = self.make_service([["Ada", 10]])
+        with self.assertRaisesRegex(ValueError, "only remaining sheet"):
+            await service._build_preview(
+                "spreadsheet-id",
+                "delete_sheet",
+                {"sheet_name": "Data"},
+            )
+
+        service = self.make_service(
+            [["Ada", 10]],
+            sheets=[
+                {"title": "Data", "sheet_id": 7},
+                {"title": "Archive", "sheet_id": 8},
+            ],
+        )
+        arguments, preview = await service._build_preview(
+            "spreadsheet-id",
+            "delete_sheet",
+            {"sheet_name": "Archive"},
+        )
+        result = await service._execute(
+            SimpleNamespace(
+                operation="delete_sheet",
+                spreadsheet_id="spreadsheet-id",
+                arguments=arguments,
+                preview=preview,
+            )
+        )
+
+        self.assertTrue(preview["destructive"])
+        self.assertTrue(result["deleted"])
+        self.assertEqual(
+            service.sheets.calls,
+            [("delete_sheet", "Archive", 8)],
+        )
+
+    async def test_delete_row_rejects_changed_target(self):
+        service = self.make_service([["Changed", 10]])
+        action = SimpleNamespace(
+            operation="delete_row",
+            spreadsheet_id="spreadsheet-id",
+            arguments={"sheet_name": "Data", "row_number": 7},
+            preview={
+                "sheet_name": "Data",
+                "sheet_id": 7,
+                "before": ["Original", 10],
+            },
+        )
+
+        with self.assertRaisesRegex(ActionConflict, "Baris target berubah"):
+            await service._check_preconditions(action)
+
+
+class PendingActionLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    def make_service(self):
+        action = PendingSheetAction(
+            code="abc123", sheet_session_id=1, user_id="user", chat_id="chat",
+            source_message_id="message-1", spreadsheet_id="spreadsheet-id",
+            operation="create_sheet", arguments={"title": "Archive"},
+            preview={"summary": "Create Archive"}, status="pending",
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+        )
+        db = MagicMock()
+        db.__aenter__.return_value = db
+        db.begin.return_value = db
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = (
+            "https://docs.google.com/spreadsheets/d/spreadsheet-id/edit"
+        )
+        db.execute = AsyncMock(return_value=result)
+        service = object.__new__(PendingSheetActionService)
+        service.session_factory = lambda: db
+        service.public_base_url = "https://preview.example.com"
+        service._find_by_code = AsyncMock(return_value=action)
+        service._execute = AsyncMock()
+        return service, action
+
+    async def test_preview_can_be_issued_in_the_preparation_turn(self):
+        service, action = self.make_service()
+
+        outcome = await service.issue_preview_url("abc123", "user", "message-1")
+
+        self.assertEqual(outcome.status, "pending")
+        self.assertIn("https://preview.example.com/preview/", outcome.message)
+        self.assertIsNotNone(action.token_hash)
+        self.assertEqual(action.status, "pending")
+        service._execute.assert_not_awaited()
+
+    async def test_confirmation_still_requires_a_later_user_message(self):
+        service, action = self.make_service()
+
+        outcome = await service.confirm_code("abc123", "user", "message-1")
+
+        self.assertEqual(outcome.status, "awaiting_user_confirmation")
+        self.assertEqual(action.status, "pending")
+        service._execute.assert_not_awaited()
+
 
 class SheetPreviewTests(unittest.TestCase):
     def make_action(self, **overrides):
@@ -312,7 +613,7 @@ class SheetPreviewTests(unittest.TestCase):
         html = render_sheet_preview(self.make_action())
 
         self.assertIn('name="cell-0-0"', html)
-        self.assertIn("Tempel ke Sheets", html)
+        self.assertIn("Terapkan ke Sheets", html)
         self.assertIn("Budget &lt;2026&gt;", html)
         self.assertIn('value="A&amp;B"', html)
         self.assertNotIn("Budget <2026>", html)
@@ -323,7 +624,7 @@ class SheetPreviewTests(unittest.TestCase):
         html = render_sheet_preview(self.make_action(status="succeeded"))
 
         self.assertIn("Data dikonfirmasi", html)
-        self.assertNotIn("Tempel ke Sheets", html)
+        self.assertNotIn("Terapkan ke Sheets", html)
 
     def test_expired_pending_preview_has_no_apply_form(self):
         action = self.make_action(
@@ -333,7 +634,69 @@ class SheetPreviewTests(unittest.TestCase):
         html = render_sheet_preview(action)
 
         self.assertIn("Link kedaluwarsa", html)
-        self.assertNotIn("Tempel ke Sheets", html)
+        self.assertNotIn("Terapkan ke Sheets", html)
+
+    def test_update_cells_preview_renders_editable_table(self):
+        action = self.make_action(
+            operation="update_cells",
+            arguments={
+                "sheet_name": "Data",
+                "cell_range": "K20:L20",
+                "values": [["New", 20]],
+            },
+            preview={
+                "spreadsheet_title": "Budget",
+                "summary": "Perbarui range K20:L20 di Data",
+                "sheet_name": "Data",
+                "sheet_id": 2,
+                "columns": ["K", "L"],
+                "rows": [["New", 20]],
+                "before": [["Old", 10]],
+                "row_number": 20,
+            },
+        )
+
+        html = render_sheet_preview(action)
+
+        self.assertIn('name="cell-0-0"', html)
+        self.assertIn('name="cell-0-1"', html)
+        self.assertIn("Terapkan ke Sheets", html)
+
+    def test_delete_previews_are_read_only_and_destructive(self):
+        row_action = self.make_action(
+            operation="delete_row",
+            arguments={"sheet_name": "Data", "row_number": 7},
+            preview={
+                "spreadsheet_title": "Budget",
+                "summary": "Hapus baris 7 dari Data",
+                "sheet_name": "Data",
+                "sheet_id": 2,
+                "columns": ["Name", "Amount"],
+                "rows": [["Ada", 10]],
+                "before": ["Ada", 10],
+                "row_number": 7,
+                "destructive": True,
+            },
+        )
+        sheet_action = self.make_action(
+            operation="delete_sheet",
+            arguments={"sheet_name": "Archive"},
+            preview={
+                "spreadsheet_title": "Budget",
+                "summary": 'Hapus sheet "Archive" secara permanen',
+                "sheet_name": "Archive",
+                "sheet_id": 3,
+                "destructive": True,
+            },
+        )
+
+        row_html = render_sheet_preview(row_action)
+        sheet_html = render_sheet_preview(sheet_action)
+
+        self.assertNotIn('name="cell-0-0"', row_html)
+        self.assertIn("Hapus dari Sheets", row_html)
+        self.assertIn("Sheet akan dihapus permanen", sheet_html)
+        self.assertIn("Hapus dari Sheets", sheet_html)
 
     def test_browser_edits_preserve_unchanged_types(self):
         service = object.__new__(PendingSheetActionService)

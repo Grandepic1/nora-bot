@@ -8,8 +8,8 @@ import inspect
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from aiohttp import web
 import aiohttp
+from aiohttp import web
 from sqlalchemy import delete, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -20,8 +20,9 @@ from app.services.pending_sheet_actions import (
     InvalidActionEdit,
     PendingSheetActionService,
 )
-from app.web.views.sheet_preview import render_sheet_preview
 from app.waha_handler.context import Context
+from app.web.views.landing import render_landing_page
+from app.web.views.sheet_preview import render_sheet_preview
 
 
 class WahaBot:
@@ -72,6 +73,10 @@ class WahaBot:
         self.app.cleanup_ctx.append(self._http_context)
         self.app.cleanup_ctx.append(self._gemini_context)
 
+        self.app.router.add_get(
+            "/",
+            self._handle_landing_page,
+        )
         self.app.router.add_post(
             "/webhook/waha",
             self._handle_webhook,
@@ -448,6 +453,12 @@ class WahaBot:
             )
 
         return web.json_response({"ok": True})
+
+    async def _handle_landing_page(self, request: web.Request):
+        return web.Response(
+            text=render_landing_page(),
+            content_type="text/html",
+        )
 
     async def _handle_sheet_preview(self, request: web.Request):
         action = await self.pending_sheet_actions.get_by_token(
