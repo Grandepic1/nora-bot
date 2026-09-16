@@ -13,6 +13,7 @@ bot = WahaBot(
     api_key=os.environ["WAHA_API_KEY"],
     database_engine=database_engine,
     session_factory=session_factory,
+    hmac_key=os.environ["HMAC_KEY"],
     prefix=os.getenv("BOT_PREFIX", "/"),
     debug=os.getenv("DEBUG", "False") == "True",
     public_base_url=os.getenv(

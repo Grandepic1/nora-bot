@@ -3,8 +3,11 @@ Waha Framework Handler with Discord Based Inspired
 """
 
 import asyncio
+import hashlib
+import hmac
 import importlib
 import inspect
+import json
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -25,6 +28,25 @@ from app.web.views.landing import render_landing_page
 from app.web.views.sheet_preview import render_sheet_preview
 
 
+def verify_webhook_hmac(
+    raw_body: bytes,
+    key: str,
+    algorithm: str | None,
+    signature: str | None,
+) -> bool:
+    if algorithm is None or algorithm.strip().lower() != "sha512":
+        return False
+    if signature is None:
+        return False
+
+    expected = hmac.new(
+        key.encode("utf-8"),
+        raw_body,
+        hashlib.sha512,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature.strip().lower())
+
+
 class WahaBot:
     def __init__(
         self,
@@ -32,6 +54,7 @@ class WahaBot:
         api_key: str,
         database_engine: AsyncEngine,
         session_factory: async_sessionmaker[AsyncSession],
+        hmac_key: str,
         prefix: str = "/",
         debug: bool = False,
         public_base_url: str = "http://127.0.0.1:8000",
@@ -41,6 +64,11 @@ class WahaBot:
         self.api_key = api_key
         self.database_engine = database_engine
         self.session_factory = session_factory
+
+        if not hmac_key:
+            raise ValueError("HMAC_KEY must not be empty")
+
+        self.hmac_key = hmac_key
         self.prefix = prefix
         self.commands = {}
         self.listeners = {}
@@ -356,8 +384,23 @@ class WahaBot:
         )
 
     async def _handle_webhook(self, request: web.Request):
+        raw_body = await request.read()
+        authenticated = verify_webhook_hmac(
+            raw_body,
+            self.hmac_key,
+            request.headers.get("X-Webhook-Hmac-Algorithm"),
+            request.headers.get("X-Webhook-Hmac"),
+        )
+
+        if not authenticated:
+            self.debug_log.event("webhook.authentication_failed")
+            return web.json_response(
+                {"error": "Unauthorized"},
+                status=401,
+            )
+
         try:
-            data = await request.json()
+            data = json.loads(raw_body)
         except Exception as error:
             self.debug_log.failure("webhook.invalid_json", error)
             return web.json_response(
