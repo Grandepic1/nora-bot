@@ -1,5 +1,8 @@
+import asyncio
 import io
 import unittest
+
+from aiohttp import ClientSession, web
 
 from app.debug_logging import DebugLogger
 from app.waha_handler.bot import WahaBot
@@ -31,6 +34,17 @@ class FakeHttp:
         return FakeResponse()
 
 
+class FakeImageResponse(FakeResponse):
+    async def read(self):
+        return b"image-bytes"
+
+
+class FakeImageHttp(FakeHttp):
+    def get(self, url, **kwargs):
+        self.calls.append((url, kwargs))
+        return FakeImageResponse()
+
+
 class FakeBot:
     def __init__(self, debug_log=None):
         self.http = FakeHttp()
@@ -40,6 +54,85 @@ class FakeBot:
 
 
 class ContextTests(unittest.IsolatedAsyncioTestCase):
+    async def test_load_image_waits_for_all_streamed_bytes(self):
+        async def stream_image(request):
+            response = web.StreamResponse(headers={"Content-Type": "image/jpeg"})
+            await response.prepare(request)
+            await response.write(b"first-chunk")
+            await asyncio.sleep(0.05)
+            await response.write(b"second-chunk")
+            await response.write_eof()
+            return response
+
+        app = web.Application()
+        app.router.add_get("/api/files/photo.jpg", stream_image)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        port = site._server.sockets[0].getsockname()[1]
+
+        try:
+            async with ClientSession() as http:
+                bot = FakeBot()
+                bot.http = http
+                bot.waha_url = f"http://127.0.0.1:{port}"
+                context = Context(bot, {
+                    "payload": {
+                        "hasMedia": True,
+                        "media": {
+                            "url": "http://waha.example/api/files/photo.jpg",
+                            "mimetype": "image/jpeg",
+                        },
+                    },
+                }, object())
+
+                image = await context.load_image()
+
+            self.assertEqual(image.data, b"first-chunksecond-chunk")
+        finally:
+            await runner.cleanup()
+
+    async def test_loads_waha_image_from_configured_server(self):
+        bot = FakeBot()
+        bot.http = FakeImageHttp()
+        context = Context(bot, {
+            "payload": {
+                "hasMedia": True,
+                "media": {
+                    "url": "http://localhost:3000/api/files/photo.jpg",
+                    "mimetype": "image/jpeg",
+                    "filename": "photo.jpg",
+                },
+            },
+        }, object())
+
+        image = await context.load_image()
+
+        self.assertEqual(image.data, b"image-bytes")
+        self.assertEqual(image.mime_type, "image/jpeg")
+        url, kwargs = bot.http.calls[0]
+        self.assertEqual(url, "https://waha.example/api/files/photo.jpg")
+        self.assertEqual(kwargs["headers"]["X-Api-Key"], "secret")
+        self.assertFalse(kwargs["allow_redirects"])
+
+    async def test_rejects_non_waha_media_path(self):
+        bot = FakeBot()
+        bot.http = FakeImageHttp()
+        context = Context(bot, {
+            "payload": {
+                "hasMedia": True,
+                "media": {
+                    "url": "http://localhost:3000/admin",
+                    "mimetype": "image/png",
+                },
+            },
+        }, object())
+
+        with self.assertRaises(ValueError):
+            await context.load_image()
+        self.assertEqual(bot.http.calls, [])
+
     async def test_send_text_is_owned_by_context(self):
         bot = FakeBot()
         context = Context(

@@ -1,5 +1,7 @@
 import secrets
 
+import aiohttp
+
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -31,6 +33,19 @@ async def setup(bot:WahaBot):
         active_session = result.scalar_one_or_none()
 
         if active_session is None:
+            return
+
+        try:
+            image = await ctx.load_image()
+        except (ValueError, OSError, aiohttp.ClientError) as error:
+            bot.debug_log.failure("waha.image.load_failed", error)
+            await ctx.send(
+                "Gambar tidak dapat dibaca. Coba kirim ulang sebagai JPG, PNG, "
+                "atau WebP."
+            )
+            return
+
+        if not ctx.message.strip() and image is None:
             return
 
         sheet_session = active_session.sheet_session
@@ -71,6 +86,7 @@ async def setup(bot:WahaBot):
             sheet_session_id=sheet_session.id,
             spreadsheet_id=spreadsheet_id,
             message=ctx.message,
+            image=image,
             callback=delivery.send,
             start_typing=delivery.start_typing,
             stop_typing=delivery.stop_typing,

@@ -2,6 +2,7 @@ import asyncio
 import unittest
 
 from app.debug_logging import DebugLogger
+from app.models.incoming_media import MediaAttachment
 from app.services.gemini import GeminiService, SYSTEM_INSTRUCTION
 
 
@@ -13,8 +14,10 @@ class FakeChat:
     def __init__(self, started=None, release=None):
         self.started = started
         self.release = release
+        self.messages = []
 
     async def send_message(self, message):
+        self.messages.append(message)
         if self.started is not None:
             self.started.set()
         if self.release is not None:
@@ -23,6 +26,55 @@ class FakeChat:
 
 
 class GeminiInactivityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_image_and_caption_reach_gemini_together(self):
+        chat = FakeChat()
+        service = self.make_service(chat)
+
+        async def no_op(*args):
+            return None
+
+        worker = await service.queue_message(
+            sheet_session_id=1,
+            spreadsheet_id=None,
+            message="Add this list to my spreadsheet",
+            image=MediaAttachment(b"image-bytes", "image/jpeg", None),
+            callback=no_op,
+            start_typing=no_op,
+            stop_typing=no_op,
+            deactivate=no_op,
+        )
+        await worker
+
+        parts = chat.messages[0]
+        self.assertEqual(parts[0].text, "Add this list to my spreadsheet")
+        self.assertEqual(parts[1].inline_data.data, b"image-bytes")
+        self.assertEqual(parts[1].inline_data.mime_type, "image/jpeg")
+        await service.remove_chat(1)
+
+    async def test_image_without_caption_asks_for_instruction(self):
+        chat = FakeChat()
+        service = self.make_service(chat)
+
+        async def no_op(*args):
+            return None
+
+        worker = await service.queue_message(
+            sheet_session_id=1,
+            spreadsheet_id=None,
+            message="",
+            image=MediaAttachment(b"image-bytes", "image/png", None),
+            callback=no_op,
+            start_typing=no_op,
+            stop_typing=no_op,
+            deactivate=no_op,
+        )
+        await worker
+
+        parts = chat.messages[0]
+        self.assertIn("ask me what to do", parts[0].text)
+        self.assertEqual(parts[1].inline_data.data, b"image-bytes")
+        await service.remove_chat(1)
+
     def make_service(self, chat, inactivity_seconds=0.05):
         service = object.__new__(GeminiService)
         service.states = {}
@@ -108,9 +160,9 @@ class GeminiInactivityTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(1, service.states)
 
     def test_system_instruction_targets_whatsapp_output(self):
-        self.assertIn("through WhatsApp", SYSTEM_INSTRUCTION)
-        self.assertIn("complete raw URL on its own line", SYSTEM_INSTRUCTION)
-        self.assertIn("never show or mention", SYSTEM_INSTRUCTION)
+        self.assertIn("WhatsApp assistant", SYSTEM_INSTRUCTION)
+        self.assertIn("full URLs on their own line", SYSTEM_INSTRUCTION)
+        self.assertIn("confirmation codes and action IDs private", SYSTEM_INSTRUCTION)
 
 
 if __name__ == "__main__":

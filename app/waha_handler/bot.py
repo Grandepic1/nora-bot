@@ -420,7 +420,14 @@ class WahaBot:
 
         body = (payload.get("body") or "").strip()
 
-        if not body:
+        media = payload.get("media") or {}
+        raw_media = payload.get("_data") or {}
+        has_image = payload.get("hasMedia") and (
+            (media.get("mimetype") or raw_media.get("mimetype") or "")
+            .startswith("image/")
+        )
+
+        if not body and not has_image:
             self.debug_log.event("webhook.ignored", reason="empty_body")
             return web.json_response({"ok": True})
 

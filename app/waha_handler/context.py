@@ -1,6 +1,14 @@
 import asyncio
+import base64
+import binascii
+from urllib.parse import unquote, urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.incoming_media import MediaAttachment
+
+
+ALLOWED_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 class Context:
@@ -18,10 +26,68 @@ class Context:
 
         self.payload = payload
         self.message = payload.get("body", "")
+        self.attachments: MediaAttachment | None = None
         self.chat_id = payload.get("from")
         self.sender = payload.get("from")
         self.session = event.get("session")
         self.message_id = payload.get("id")
+
+    async def load_image(self) -> MediaAttachment | None:
+        """Load one WAHA image, if present, without trusting a webhook URL host."""
+        if not self.payload.get("hasMedia"):
+            return None
+
+        media = self.payload.get("media") or {}
+        raw_data = self.payload.get("_data") or {}
+        mime_type = media.get("mimetype") or raw_data.get("mimetype")
+        if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
+            if isinstance(mime_type, str) and mime_type.startswith("image/"):
+                raise ValueError("Unsupported image format")
+            return None
+
+        media_url = media.get("url")
+        if media_url:
+            parsed = urlsplit(media_url)
+            path = unquote(parsed.path)
+            if (
+                not path.startswith("/api/files/")
+                or ".." in path.split("/")
+                or parsed.fragment
+            ):
+                raise ValueError("Unsupported WAHA media URL")
+            if self.bot.http is None:
+                raise RuntimeError("HTTP client is not available")
+
+            # WAHA may advertise a public hostname that is unreachable here.
+            # Fetch only its media path from the configured WAHA server.
+            url = f"{self.bot.waha_url}{parsed.path}"
+            if parsed.query:
+                url += f"?{parsed.query}"
+            async with self.bot.http.get(
+                url,
+                headers={"X-Api-Key": self.bot.api_key},
+                allow_redirects=False,
+            ) as response:
+                response.raise_for_status()
+                image_bytes = await response.read()
+        else:
+            encoded_body = raw_data.get("body")
+            if raw_data.get("type") != "image" or not encoded_body:
+                raise ValueError("WAHA did not provide downloadable image data")
+            try:
+                image_bytes = base64.b64decode(encoded_body, validate=True)
+            except (binascii.Error, ValueError) as error:
+                raise ValueError("Invalid image data") from error
+
+        if not image_bytes:
+            raise ValueError("Image is empty")
+
+        self.attachments = MediaAttachment(
+            data=image_bytes,
+            mime_type=mime_type,
+            filename=media.get("filename"),
+        )
+        return self.attachments
 
     @property
     def db(self) -> AsyncSession:

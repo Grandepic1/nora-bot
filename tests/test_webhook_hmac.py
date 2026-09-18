@@ -1,6 +1,8 @@
+import asyncio
 import hashlib
 import hmac
 import unittest
+from unittest.mock import AsyncMock
 
 from app.debug_logging import DebugLogger
 from app.waha_handler.bot import WahaBot, verify_webhook_hmac
@@ -13,6 +15,17 @@ class FakeRequest:
 
     async def read(self):
         return self.body
+
+
+class FakeDb:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        return False
+
+    async def commit(self):
+        return None
 
 
 class WebhookHmacTests(unittest.TestCase):
@@ -106,6 +119,29 @@ class WebhookHmacHandlerTests(unittest.IsolatedAsyncioTestCase):
         response = await self.bot._handle_webhook(request)
 
         self.assertEqual(response.status, 200)
+
+    async def test_image_without_caption_reaches_message_listener(self):
+        body = (
+            b'{"event":"message","session":"default","payload":'
+            b'{"id":"image-1","from":"chat-id","body":"",'
+            b'"hasMedia":true,"media":{"mimetype":"image/jpeg",'
+            b'"url":"http://waha/api/files/photo.jpg"}}}'
+        )
+        signature = hmac.new(
+            self.bot.hmac_key.encode(), body, hashlib.sha512,
+        ).hexdigest()
+        self.bot.session_factory = FakeDb
+        self.bot.prefix = "/"
+        self.bot._get_conversation_lock = lambda *args: asyncio.Lock()
+        self.bot._dispatch = AsyncMock()
+
+        response = await self.bot._handle_webhook(FakeRequest(body, {
+            "X-Webhook-Hmac-Algorithm": "sha512",
+            "X-Webhook-Hmac": signature,
+        }))
+
+        self.assertEqual(response.status, 200)
+        self.bot._dispatch.assert_awaited_once()
 
 
 if __name__ == "__main__":
