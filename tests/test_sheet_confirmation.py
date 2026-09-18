@@ -447,6 +447,31 @@ class PendingCoordinateActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(preview["columns"], ["K", "L"])
         self.assertEqual(preview["row_number"], 20)
 
+    async def test_single_cell_preview_includes_its_full_row(self):
+        service = self.make_service([["Old"]])
+        service.sheets.read_row = (
+            lambda spreadsheet_id, sheet_name, row_number:
+            ["Name", "Status", "Notes"]
+            if row_number == 1 else ["Ada", "Old", "Keep this"]
+        )
+
+        arguments, preview = await service._build_preview(
+            "spreadsheet-id",
+            "update_cells",
+            {
+                "sheet_name": "Data",
+                "cell_range": "B20",
+                "values": [["New"]],
+            },
+        )
+
+        self.assertEqual(arguments["cell_range"], "B20")
+        self.assertEqual(arguments["values"], [["New"]])
+        self.assertEqual(preview["before"], [["Old"]])
+        self.assertEqual(preview["display_columns"], ["Name", "Status", "Notes"])
+        self.assertEqual(preview["display_rows"], [["Ada", "Old", "Keep this"]])
+        self.assertEqual(preview["target_start_column"], 1)
+
     async def test_update_cells_requires_values_to_match_range(self):
         service = self.make_service([["Old", 1]])
 
@@ -615,7 +640,8 @@ class SheetPreviewTests(unittest.TestCase):
         self.assertIn('name="cell-0-0"', html)
         self.assertIn("Terapkan ke Sheets", html)
         self.assertIn("Budget &lt;2026&gt;", html)
-        self.assertIn('value="A&amp;B"', html)
+        self.assertIn('>A&amp;B</textarea>', html)
+        self.assertIn('class="preview-cell-input', html)
         self.assertNotIn("Budget <2026>", html)
         self.assertIn('href="/static/index.css"', html)
         self.assertNotIn("<style>", html)
@@ -661,6 +687,58 @@ class SheetPreviewTests(unittest.TestCase):
         self.assertIn('name="cell-0-0"', html)
         self.assertIn('name="cell-0-1"', html)
         self.assertIn("Terapkan ke Sheets", html)
+
+    def test_single_cell_edit_shows_full_row_but_only_target_is_editable(self):
+        action = self.make_action(
+            operation="update_cells",
+            arguments={
+                "sheet_name": "Data",
+                "cell_range": "B20",
+                "values": [["New"]],
+            },
+            preview={
+                "spreadsheet_title": "Budget",
+                "summary": "Perbarui B20 di Data",
+                "sheet_name": "Data",
+                "sheet_id": 2,
+                "columns": ["B"],
+                "rows": [["New"]],
+                "before": [["Old"]],
+                "row_number": 20,
+                "display_columns": ["Name", "Status", "Notes"],
+                "display_rows": [["Ada", "Old", "Keep this"]],
+                "target_start_column": 1,
+            },
+        )
+
+        html = render_sheet_preview(action)
+
+        self.assertIn("Name", html)
+        self.assertIn("Notes", html)
+        self.assertIn("Ada", html)
+        self.assertIn("Keep this", html)
+        self.assertIn('name="cell-0-0"', html)
+        self.assertIn('>New</textarea>', html)
+        self.assertNotIn('name="cell-0-1"', html)
+        service = object.__new__(PendingSheetActionService)
+        self.assertEqual(
+            service._apply_edits(action, {"cell-0-0": "Confirmed"})["values"],
+            [["Confirmed"]],
+        )
+
+    def test_long_cell_content_stays_visible_and_escaped(self):
+        value = "A long first line & <unsafe>\nA second line"
+        action = self.make_action(
+            arguments={"sheet_name": "Data", "values": [[value, 10]]},
+        )
+
+        html = render_sheet_preview(action)
+
+        self.assertIn(
+            "A long first line &amp; &lt;unsafe&gt;\nA second line</textarea>",
+            html,
+        )
+        self.assertIn('field.addEventListener("input", fitContent)', html)
 
     def test_delete_previews_are_read_only_and_destructive(self):
         row_action = self.make_action(

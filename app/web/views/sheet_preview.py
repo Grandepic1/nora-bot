@@ -112,28 +112,67 @@ def _preview_context(
         first_number = int(preview.get("row_number", 1))
         rows = []
         for row_index, row in enumerate(values):
+            display_row = (
+                preview["display_rows"][row_index]
+                if action.operation == "update_cells"
+                and "display_rows" in preview
+                else row
+            )
+            start_column = (
+                int(preview["target_start_column"])
+                if action.operation == "update_cells"
+                and "display_rows" in preview
+                else 0
+            )
+            display_width = (
+                len(preview["display_columns"])
+                if action.operation == "update_cells"
+                and "display_rows" in preview
+                else len(row)
+            )
             rows.append(
                 {
                     "number": first_number + row_index,
                     "cells": [
                         {
-                            "name": f"cell-{row_index}-{column_index}",
-                            "value": value,
+                            "name": (
+                                f"cell-{row_index}-{column_index - start_column}"
+                                if start_column <= column_index < start_column + len(row)
+                                else None
+                            ),
+                            "value": (
+                                row[column_index - start_column]
+                                if start_column <= column_index < start_column + len(row)
+                                else (
+                                    display_row[column_index]
+                                    if column_index < len(display_row)
+                                    else ""
+                                )
+                            ),
+                            "editable": (
+                                action.operation != "delete_row"
+                                and start_column <= column_index
+                                < start_column + len(row)
+                            ),
+                            "context": (
+                                action.operation == "update_cells"
+                                and "display_rows" in preview
+                            ),
                         }
-                        for column_index, value in enumerate(row)
+                        for column_index in range(display_width)
                     ],
                 }
             )
         context.update(
-            columns=preview["columns"],
+            columns=preview.get("display_columns", preview["columns"]),
             rows=rows,
             detected=len(rows),
             ready=(
                 len(rows)
                 if action.operation == "delete_row"
                 else sum(
-                    all(str(cell["value"]).strip() for cell in row["cells"])
-                    for row in rows
+                    all(str(value).strip() for value in values_row)
+                    for values_row in values
                 )
             ),
             editable=action.operation != "delete_row",

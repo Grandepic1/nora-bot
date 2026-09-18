@@ -1,7 +1,7 @@
-<td class="border border-line p-0">
-	{% if editable %}
-		<input name="{{ cell.name }}" value="{{ cell.value }}" aria-label="Edit nilai sel" class="w-full min-w-36 border-0 bg-white px-3 py-2 text-sm text-ink outline-none transition-colors hover:bg-surface/60 focus:relative focus:bg-white focus:ring-2 focus:ring-inset focus:ring-accent">
+<td class="preview-cell border border-line p-0">
+	{% if cell.editable %}
+		<textarea name="{{ cell.name }}" rows="3" aria-label="Edit nilai sel" class="preview-cell-input border-0 bg-white px-3 py-2 text-sm text-ink outline-none transition-colors hover:bg-surface/60 focus:relative focus:bg-white focus:ring-2 focus:ring-inset focus:ring-accent">{{ cell.value }}</textarea>
 	{% else %}
-		<span class="block min-w-36 bg-accent/5 px-3 py-2 text-sm text-ink">{{ cell.value }}</span>
+		<span class="preview-cell-value block {{ 'bg-surface/50' if cell.context else 'bg-accent/5' }} px-3 py-2 text-sm text-ink">{{ cell.value }}</span>
 	{% endif %}
 </td>

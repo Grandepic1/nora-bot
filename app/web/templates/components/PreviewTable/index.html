@@ -10,3 +10,15 @@
 		</tbody>
 	</table>
 </div>
+{% if editable %}
+<script>
+	for (const field of document.querySelectorAll(".preview-cell-input")) {
+		const fitContent = () => {
+			field.style.height = "auto";
+			field.style.height = `${field.scrollHeight}px`;
+		};
+		fitContent();
+		field.addEventListener("input", fitContent);
+	}
+</script>
+{% endif %}

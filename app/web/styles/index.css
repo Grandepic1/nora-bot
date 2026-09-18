@@ -39,6 +39,28 @@
 	}
 }
 
+@layer components {
+	.preview-cell {
+		min-width: 16rem;
+		width: 22rem;
+		vertical-align: top;
+	}
+
+	.preview-cell-input {
+		display: block;
+		width: 100%;
+		min-height: 4.5rem;
+		resize: vertical;
+		overflow-wrap: anywhere;
+	}
+
+	.preview-cell-value {
+		min-height: 4.5rem;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+}
+
 @keyframes fade-up {
 	from {
 		opacity: 0;

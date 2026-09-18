@@ -559,6 +559,32 @@ class PendingSheetActionService:
             )
             start_row = before_data.get("start_row") or 1
             width = max(len(row) for row in values)
+            start_column = self._column_number(
+                re.match(r"[A-Z]+", cell_range).group()
+            ) - 1
+            header = await _run_sheets(
+                self.sheets.read_row,
+                spreadsheet_id,
+                sheet_name,
+                1,
+                debug_log=self.debug_log,
+            )
+            display_rows = []
+            for row_number in range(start_row, start_row + expected_rows):
+                display_rows.append(
+                    await _run_sheets(
+                        self.sheets.read_row,
+                        spreadsheet_id,
+                        sheet_name,
+                        row_number,
+                        debug_log=self.debug_log,
+                    )
+                )
+            display_width = max(
+                len(header),
+                *(len(row) for row in display_rows),
+                start_column + width,
+            )
             preview.update(
                 summary=f"Perbarui range {cell_range} di {sheet_name}",
                 columns=self._range_labels(cell_range, width),
@@ -566,6 +592,9 @@ class PendingSheetActionService:
                 before=before_data["values"],
                 row_number=start_row,
                 cell_range=cell_range,
+                display_columns=self._column_labels(header, display_width),
+                display_rows=display_rows,
+                target_start_column=start_column,
             )
             return {
                 "sheet_name": sheet_name,
